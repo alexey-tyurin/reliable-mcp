@@ -1,0 +1,36 @@
+services:
+  weather-mcp:
+    command: npx ts-node-dev --respawn src/entrypoints/weather-mcp.ts
+    volumes:
+      - ./src:/app/src:ro
+      - ./fixtures:/app/fixtures:ro
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+    ports:
+      - "3001:3001"
+      - "9231:9229"
+
+  flight-mcp:
+    command: npx ts-node-dev --respawn src/entrypoints/flight-mcp.ts
+    volumes:
+      - ./src:/app/src:ro
+      - ./fixtures:/app/fixtures:ro
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+    ports:
+      - "3002:3002"
+      - "9232:9229"
+
+  agent:
+    command: npx ts-node-dev --respawn src/entrypoints/agent.ts
+    volumes:
+      - ./src:/app/src:ro
+      - ./fixtures:/app/fixtures:ro
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+    ports:
+      - "3000:3000"
+      - "9230:9229"

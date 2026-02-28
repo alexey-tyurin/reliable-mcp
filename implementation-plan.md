@@ -922,7 +922,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 npm run test:watch          # Keep running in a terminal — TDD red/green/refactor
 
 # Run individual services locally (without Docker)
-WEATHER_MCP_URL=http://localhost:3001/mcp FLIGHT_MCP_URL=http://localhost:3002/mcp npm run dev:agent
+WEATHER_MCP_URL=http://localhost:3001/mcp FLIGHT_MCP_URL=http://localhost:3002/mcp 
+npm run dev:agent
 npm run dev:weather-mcp
 npm run dev:flight-mcp
 

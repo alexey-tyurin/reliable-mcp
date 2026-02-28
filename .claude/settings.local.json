@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm view @langchain/langgraph@latest version)",
+      "Bash(npm view @langchain/core@latest version)",
+      "Bash(npm view @langchain/openai@latest version)"
+    ]
+  }
+}
