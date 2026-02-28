@@ -17,9 +17,9 @@
     "eval": "tsx tests/eval/run-eval.ts",
     "predeploy": "tsc --noEmit && npm run lint && npm run test && npm run eval",
     "typecheck": "tsc --noEmit",
-    "dev:agent": "SERVICE_ROLE=agent tsx src/entrypoints/agent.ts",
-    "dev:weather-mcp": "SERVICE_ROLE=weather-mcp tsx src/entrypoints/weather-mcp.ts",
-    "dev:flight-mcp": "SERVICE_ROLE=flight-mcp tsx src/entrypoints/flight-mcp.ts"
+    "dev:agent": "SERVICE_ROLE=agent tsx --env-file=.env src/entrypoints/agent.ts",
+    "dev:weather-mcp": "SERVICE_ROLE=weather-mcp tsx --env-file=.env src/entrypoints/weather-mcp.ts",
+    "dev:flight-mcp": "SERVICE_ROLE=flight-mcp tsx --env-file=.env src/entrypoints/flight-mcp.ts"
   },
   "dependencies": {
     "@langchain/core": "0.3.80",
