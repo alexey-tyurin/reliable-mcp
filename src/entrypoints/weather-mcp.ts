@@ -1,16 +1,22 @@
-import express from 'express';
 import { loadEnv } from '../config/env.js';
+import type { WeatherMcpEnv } from '../config/env.js';
 import { createLogger } from '../observability/logger.js';
 import { createRedisClient } from '../config/redis.js';
-import { createHealthHandler } from '../utils/health.js';
 import { createShutdownRegistry } from '../utils/graceful-shutdown.js';
+import { createWeatherMcpServer } from '../mcp/weather-server.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
   const logger = createLogger('weather-mcp');
   const registry = createShutdownRegistry();
 
-  const redis = createRedisClient(env.REDIS_URL);
+  if (env.SERVICE_ROLE !== 'weather-mcp') {
+    throw new Error(`Expected SERVICE_ROLE=weather-mcp, got ${env.SERVICE_ROLE}`);
+  }
+
+  const weatherEnv = env as WeatherMcpEnv;
+
+  const redis = createRedisClient(weatherEnv.REDIS_URL);
   try {
     await redis.connect();
   } catch (error: unknown) {
@@ -18,12 +24,12 @@ async function main(): Promise<void> {
     logger.warn({ error: message }, 'Redis connection failed, starting in degraded mode');
   }
 
-  const app = express();
+  const { app, abortController } = await createWeatherMcpServer({
+    weatherApiKey: weatherEnv.WEATHERAPI_KEY,
+  });
 
-  app.get('/health', createHealthHandler('weather-mcp'));
-
-  const server = app.listen(env.PORT, () => {
-    logger.info({ port: env.PORT }, 'Weather MCP service ready');
+  const server = app.listen(weatherEnv.PORT, () => {
+    logger.info({ port: weatherEnv.PORT }, 'Weather MCP service ready');
   });
 
   registry.register('http-server', () =>
@@ -31,6 +37,9 @@ async function main(): Promise<void> {
       server.close(() => { resolve(); });
     }),
   );
+  registry.register('abort-in-flight', () => {
+    abortController.abort();
+  });
   registry.register('redis', async () => {
     await redis.quit();
   });
