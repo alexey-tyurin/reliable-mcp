@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { AgentEnv, WeatherMcpEnv, FlightMcpEnv } from '../../src/config/env.js';
 
 describe('loadEnv', () => {
   const originalEnv = process.env;
@@ -20,7 +21,7 @@ describe('loadEnv', () => {
       process.env['REDIS_URL'] = 'redis://localhost:6379';
 
       const { loadEnv } = await import('../../src/config/env.js');
-      const env = loadEnv();
+      const env = loadEnv() as AgentEnv;
 
       expect(env.SERVICE_ROLE).toBe('agent');
       expect(env.OPENAI_API_KEY).toBe('sk-test-key');
@@ -35,6 +36,7 @@ describe('loadEnv', () => {
       process.env['SERVICE_ROLE'] = 'agent';
       process.env['LANGSMITH_API_KEY'] = 'ls-test-key';
       process.env['OAUTH_SECRET'] = 'a-secret-that-is-at-least-32-chars';
+      delete process.env['OPENAI_API_KEY'];
 
       const { loadEnv } = await import('../../src/config/env.js');
       expect(() => loadEnv()).toThrow();
@@ -44,6 +46,7 @@ describe('loadEnv', () => {
       process.env['SERVICE_ROLE'] = 'agent';
       process.env['OPENAI_API_KEY'] = 'sk-test-key';
       process.env['LANGSMITH_API_KEY'] = 'ls-test-key';
+      delete process.env['OAUTH_SECRET'];
 
       const { loadEnv } = await import('../../src/config/env.js');
       expect(() => loadEnv()).toThrow();
@@ -70,7 +73,7 @@ describe('loadEnv', () => {
       process.env['REDIS_URL'] = 'redis://localhost:6379';
 
       const { loadEnv } = await import('../../src/config/env.js');
-      const env = loadEnv();
+      const env = loadEnv() as WeatherMcpEnv;
 
       expect(env.SERVICE_ROLE).toBe('weather-mcp');
       expect(env.WEATHERAPI_KEY).toBe('test-weather-key');
@@ -79,6 +82,7 @@ describe('loadEnv', () => {
 
     it('throws when WEATHERAPI_KEY is missing', async () => {
       process.env['SERVICE_ROLE'] = 'weather-mcp';
+      delete process.env['WEATHERAPI_KEY'];
 
       const { loadEnv } = await import('../../src/config/env.js');
       expect(() => loadEnv()).toThrow();
@@ -91,7 +95,7 @@ describe('loadEnv', () => {
       process.env['REDIS_URL'] = 'redis://localhost:6379';
 
       const { loadEnv } = await import('../../src/config/env.js');
-      const env = loadEnv();
+      const env = loadEnv() as FlightMcpEnv;
 
       expect(env.SERVICE_ROLE).toBe('flight-mcp');
       expect(env.FLIGHT_PROVIDER).toBe('mock');
@@ -101,6 +105,7 @@ describe('loadEnv', () => {
     it('requires FLIGHTAWARE_API_KEY when provider is flightaware', async () => {
       process.env['SERVICE_ROLE'] = 'flight-mcp';
       process.env['FLIGHT_PROVIDER'] = 'flightaware';
+      delete process.env['FLIGHTAWARE_API_KEY'];
 
       const { loadEnv } = await import('../../src/config/env.js');
       expect(() => loadEnv()).toThrow();
@@ -113,7 +118,7 @@ describe('loadEnv', () => {
       process.env['REDIS_URL'] = 'redis://localhost:6379';
 
       const { loadEnv } = await import('../../src/config/env.js');
-      const env = loadEnv();
+      const env = loadEnv() as FlightMcpEnv;
 
       expect(env.FLIGHT_PROVIDER).toBe('flightaware');
       expect(env.FLIGHTAWARE_API_KEY).toBe('fa-test-key');
