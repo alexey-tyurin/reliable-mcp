@@ -33,11 +33,20 @@ interface McpSession {
   server: McpServer;
 }
 
+async function resolveWeatherFetch(config: WeatherServerConfig): Promise<typeof fetch> {
+  const baseFetch = config.fetchFn ?? globalThis.fetch;
+  if (process.env['CHAOS_ENABLED'] === 'true') {
+    const { createChaosAwareFetch } = await import('../chaos/interceptors/http-interceptor.js');
+    return createChaosAwareFetch('weather-api', baseFetch);
+  }
+  return baseFetch;
+}
+
 function createWeatherFetcher(
   config: WeatherServerConfig,
   abortSignal: AbortSignal,
+  fetchFn: typeof fetch,
 ): (input: WeatherInput) => Promise<WeatherOutput> {
-  const fetchFn = config.fetchFn ?? globalThis.fetch;
   const logger = createLogger('weather-fetcher');
 
   const innerFn = async (input: WeatherInput): Promise<WeatherOutput> => {
@@ -176,7 +185,8 @@ export async function createWeatherMcpServer(
   config: WeatherServerConfig,
 ): Promise<WeatherServerResult> {
   const abortController = new AbortController();
-  const fetchWeather = createWeatherFetcher(config, abortController.signal);
+  const fetchFn = await resolveWeatherFetch(config);
+  const fetchWeather = createWeatherFetcher(config, abortController.signal, fetchFn);
   const logger = createLogger('weather-mcp');
   const sessions = new Map<string, McpSession>();
 

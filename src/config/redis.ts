@@ -38,5 +38,17 @@ export function createRedisClient(
     logger.info('Redis connection closed');
   });
 
+  if (process.env['CHAOS_ENABLED'] === 'true') {
+    import('../chaos/interceptors/redis-interceptor.js')
+      .then(({ wrapRedisWithChaos }) => {
+        wrapRedisWithChaos(client, 'redis');
+        logger.info('Redis chaos interceptor wired');
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn({ error: message }, 'Failed to wire Redis chaos interceptor');
+      });
+  }
+
   return client;
 }

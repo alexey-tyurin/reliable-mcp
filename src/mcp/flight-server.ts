@@ -28,10 +28,10 @@ interface McpSession {
   server: McpServer;
 }
 
-function buildFlightProvider(
+async function buildFlightProvider(
   config: FlightServerConfig,
   abortSignal: AbortSignal,
-): FlightProvider {
+): Promise<FlightProvider> {
   if (config.provider === 'flightaware') {
     if (!config.flightAwareConfig) {
       throw new Error('flightAwareConfig is required when provider is flightaware');
@@ -118,7 +118,7 @@ export async function createFlightMcpServer(
   config: FlightServerConfig,
 ): Promise<FlightServerResult> {
   const abortController = new AbortController();
-  const provider = buildFlightProvider(config, abortController.signal);
+  const provider = await buildFlightProvider(config, abortController.signal);
   const logger = createLogger('flight-mcp');
   const sessions = new Map<string, McpSession>();
 

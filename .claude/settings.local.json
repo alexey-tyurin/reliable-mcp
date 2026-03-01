@@ -19,7 +19,14 @@
       "Bash(npx vitest run tests/unit/oauth-middleware.test.ts)",
       "Bash(npx vitest run tests/unit/agent-http.test.ts)",
       "Bash(npx vitest run tests/unit/metrics.test.ts)",
-      "Bash(npx vitest run tests/unit/langsmith.test.ts)"
+      "Bash(npx vitest run tests/unit/langsmith.test.ts)",
+      "Bash(npx vitest run tests/unit/chaos-guard.test.ts)",
+      "Bash(npx vitest run tests/unit/chaos-controller.test.ts)",
+      "Bash(npx vitest run tests/unit/chaos-http-interceptor.test.ts)",
+      "Bash(npx vitest run tests/unit/chaos-redis-interceptor.test.ts)",
+      "Bash(npx vitest run tests/unit/chaos-auth-interceptor.test.ts)",
+      "Bash(CHAOS_ENABLED=true npx vitest run tests/chaos/)",
+      "Bash(npm run build:prod)"
     ]
   }
 }

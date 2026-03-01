@@ -79,7 +79,7 @@ async function main(): Promise<void> {
     ['default-client', env.OAUTH_SECRET],
   ]);
 
-  const app = createAgentApp({
+  const app = await createAgentApp({
     agentGraph,
     oauthSecret: env.OAUTH_SECRET,
     oauthClients,

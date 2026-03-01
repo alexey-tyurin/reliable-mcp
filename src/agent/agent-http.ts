@@ -109,7 +109,7 @@ function createChatHandler(
   };
 }
 
-export function createAgentApp(config: AgentAppConfig): express.Express {
+export async function createAgentApp(config: AgentAppConfig): Promise<express.Express> {
   const app = express();
 
   app.use(helmet({
@@ -148,12 +148,25 @@ export function createAgentApp(config: AgentAppConfig): express.Express {
   const checkLimit = createRateLimiter(rateLimiter);
   const rateLimiterMiddleware = createRateLimiterMiddleware(checkLimit);
 
-  app.post(
-    '/chat',
+  const chatMiddleware: express.RequestHandler[] = [];
+
+  if (process.env['CHAOS_ENABLED'] === 'true' && process.env['NODE_ENV'] !== 'production') {
+    const { chaosAuthMiddleware } = await import('../chaos/interceptors/auth-interceptor.js');
+    chatMiddleware.push(chaosAuthMiddleware as express.RequestHandler);
+  }
+
+  chatMiddleware.push(
     authMiddleware as express.RequestHandler,
     rateLimiterMiddleware,
     createChatHandler(config.agentGraph),
   );
+
+  app.post('/chat', ...chatMiddleware);
+
+  if (process.env['CHAOS_ENABLED'] === 'true' && process.env['NODE_ENV'] !== 'production') {
+    const { registerChaosEndpoint } = await import('../chaos/admin-endpoint.js');
+    registerChaosEndpoint(app);
+  }
 
   return app;
 }

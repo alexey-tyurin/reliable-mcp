@@ -88,10 +88,19 @@ export interface FlightAwareConfig {
   abortSignal?: AbortSignal;
 }
 
-export function createFlightAwareProvider(
+async function resolveFlightFetch(config: FlightAwareConfig): Promise<typeof fetch> {
+  const baseFetch = config.fetchFn ?? globalThis.fetch;
+  if (process.env['CHAOS_ENABLED'] === 'true') {
+    const { createChaosAwareFetch } = await import('../chaos/interceptors/http-interceptor.js');
+    return createChaosAwareFetch('flight-api', baseFetch);
+  }
+  return baseFetch;
+}
+
+export async function createFlightAwareProvider(
   config: FlightAwareConfig,
-): FlightProvider {
-  const fetchFn = config.fetchFn ?? globalThis.fetch;
+): Promise<FlightProvider> {
+  const fetchFn = await resolveFlightFetch(config);
   const logger = createLogger('flightaware-provider');
 
   const innerFn = async (input: FlightInput): Promise<FlightOutput> => {

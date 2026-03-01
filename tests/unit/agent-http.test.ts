@@ -55,7 +55,7 @@ describe('Agent HTTP App', () => {
 
   beforeAll(async () => {
     token = await signTestToken('test-user');
-    const app = createAgentApp(buildConfig());
+    const app = await createAgentApp(buildConfig());
     server = app.listen(0);
     const address = server.address();
     const port = typeof address === 'object' && address !== null ? address.port : 0;
@@ -185,7 +185,7 @@ describe('Agent HTTP App', () => {
 
   describe('Rate limiting', () => {
     it('returns 429 when rate limit exceeded', async () => {
-      const rateLimitedApp = createAgentApp(buildConfig({
+      const rateLimitedApp = await createAgentApp(buildConfig({
         rateLimiterPoints: 2,
         rateLimiterDuration: 60,
       }));
@@ -224,7 +224,7 @@ describe('Agent HTTP App', () => {
         },
       };
 
-      const failApp = createAgentApp(buildConfig({ agentGraph: failingGraph }));
+      const failApp = await createAgentApp(buildConfig({ agentGraph: failingGraph }));
       const failServer = failApp.listen(0);
       const address = failServer.address();
       const port = typeof address === 'object' && address !== null ? address.port : 0;

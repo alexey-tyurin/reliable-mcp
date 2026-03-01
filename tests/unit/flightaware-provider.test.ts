@@ -58,7 +58,7 @@ function createFailingFetch(status: number): typeof fetch {
 
 describe('FlightAwareProvider', () => {
   it('returns flight data for a valid flight number', async () => {
-    const provider = createFlightAwareProvider({
+    const provider = await createFlightAwareProvider({
       apiKey: 'test-key',
       fetchFn: createSuccessFetch(),
       retryOptions: { maxRetries: 0 },
@@ -75,7 +75,7 @@ describe('FlightAwareProvider', () => {
   });
 
   it('returns valid FlightOutput shape', async () => {
-    const provider = createFlightAwareProvider({
+    const provider = await createFlightAwareProvider({
       apiKey: 'test-key',
       fetchFn: createSuccessFetch(),
       retryOptions: { maxRetries: 0 },
@@ -103,7 +103,7 @@ describe('FlightAwareProvider', () => {
   });
 
   it('throws ApiError when flight is not found', async () => {
-    const provider = createFlightAwareProvider({
+    const provider = await createFlightAwareProvider({
       apiKey: 'test-key',
       fetchFn: createEmptyFetch(),
       retryOptions: { maxRetries: 0 },
@@ -115,7 +115,7 @@ describe('FlightAwareProvider', () => {
   });
 
   it('throws ApiError when API returns error status', async () => {
-    const provider = createFlightAwareProvider({
+    const provider = await createFlightAwareProvider({
       apiKey: 'test-key',
       fetchFn: createFailingFetch(500),
       retryOptions: { maxRetries: 0 },
@@ -140,7 +140,7 @@ describe('FlightAwareProvider', () => {
       });
     };
 
-    const provider = createFlightAwareProvider({
+    const provider = await createFlightAwareProvider({
       apiKey: 'my-secret-key',
       fetchFn: capturingFetch,
       retryOptions: { maxRetries: 0 },
@@ -164,7 +164,7 @@ describe('FlightAwareProvider', () => {
       });
     };
 
-    const provider = createFlightAwareProvider({
+    const provider = await createFlightAwareProvider({
       apiKey: 'test-key',
       fetchFn: capturingFetch,
       retryOptions: { maxRetries: 0 },
