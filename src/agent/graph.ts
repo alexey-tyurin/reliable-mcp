@@ -12,15 +12,24 @@ import type { LlmLike } from './nodes.js';
 import type { McpClientManager } from '../mcp/client.js';
 import type { SessionStore } from '../cache/session-store.js';
 import { createLogger } from '../observability/logger.js';
+import { createTracedInvoke } from '../observability/langsmith.js';
+import type { LangSmithClientLike } from '../observability/langsmith.js';
+import type { MetricsTracker } from '../observability/metrics.js';
 
 export interface AgentGraphConfig {
   llm: LlmLike;
   mcpManager: McpClientManager;
   sessionStore: SessionStore;
+  langSmithClient?: LangSmithClientLike;
+  metricsTracker?: MetricsTracker;
+}
+
+export interface InvokeOptions {
+  cacheHit?: boolean;
 }
 
 interface CompiledAgentGraph {
-  invoke: (input: AgentState) => Promise<AgentState>;
+  invoke: (input: AgentState, options?: InvokeOptions) => Promise<AgentState>;
 }
 
 const logger = createLogger('agent-graph');
@@ -44,27 +53,49 @@ export function createAgentGraph(config: AgentGraphConfig): CompiledAgentGraph {
 
   const compiled = graph.compile();
 
+  async function coreInvoke(input: AgentState): Promise<AgentState> {
+    const previousMessages = await loadSessionMessages(
+      config.sessionStore,
+      input.userId,
+      input.sessionId,
+    );
+
+    const inputWithHistory: AgentState = {
+      ...input,
+      messages: [...previousMessages, ...input.messages],
+    };
+
+    const result = await compiled.invoke(inputWithHistory) as AgentState;
+
+    await saveSessionMessages(
+      config.sessionStore,
+      input.userId,
+      input.sessionId,
+      result.messages,
+    );
+
+    return result;
+  }
+
+  const tracedInvoke = config.langSmithClient
+    ? createTracedInvoke(coreInvoke, config.langSmithClient)
+    : null;
+
   return {
-    invoke: async (input: AgentState): Promise<AgentState> => {
-      const previousMessages = await loadSessionMessages(
-        config.sessionStore,
-        input.userId,
-        input.sessionId,
-      );
+    invoke: async (input: AgentState, options?: InvokeOptions): Promise<AgentState> => {
+      const cacheHit = options?.cacheHit ?? false;
 
-      const inputWithHistory: AgentState = {
-        ...input,
-        messages: [...previousMessages, ...input.messages],
-      };
+      if (config.metricsTracker) {
+        config.metricsTracker.recordCacheResult(cacheHit);
+      }
 
-      const result = await compiled.invoke(inputWithHistory) as AgentState;
+      const result = tracedInvoke
+        ? await tracedInvoke(input, { cacheHit })
+        : await coreInvoke(input);
 
-      await saveSessionMessages(
-        config.sessionStore,
-        input.userId,
-        input.sessionId,
-        result.messages,
-      );
+      if (result.error && config.metricsTracker) {
+        config.metricsTracker.recordError(result.error.code);
+      }
 
       return result;
     },
