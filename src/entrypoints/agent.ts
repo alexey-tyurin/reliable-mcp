@@ -1,17 +1,21 @@
-import express from 'express';
 import { loadEnv } from '../config/env.js';
 import type { AgentEnv } from '../config/env.js';
 import { createLogger } from '../observability/logger.js';
 import { createRedisClient } from '../config/redis.js';
-import { createHealthHandler } from '../utils/health.js';
 import { createShutdownRegistry } from '../utils/graceful-shutdown.js';
 import { createMcpClientManager } from '../mcp/client.js';
 import { createSessionStore } from '../cache/session-store.js';
 import type { RedisLike } from '../cache/session-store.js';
 import { createAgentGraph } from '../agent/graph.js';
+import { createAgentApp } from '../agent/agent-http.js';
 import type { LlmLike, LangChainTool } from '../agent/nodes.js';
 import { ChatOpenAI } from '@langchain/openai';
 import type { BaseMessage } from '@langchain/core/messages';
+
+const CORS_ORIGINS = ['http://localhost:3000'];
+const RATE_LIMITER_POINTS = 30;
+const RATE_LIMITER_DURATION = 60;
+const CONNECTION_DRAIN_TIMEOUT = 5000;
 
 function wrapChatModel(chatModel: ChatOpenAI): LlmLike {
   return {
@@ -71,10 +75,18 @@ async function main(): Promise<void> {
     sessionStore,
   });
 
-  const app = express();
-  app.locals['agentGraph'] = agentGraph;
+  const oauthClients = new Map<string, string>([
+    ['default-client', env.OAUTH_SECRET],
+  ]);
 
-  app.get('/health', createHealthHandler('agent'));
+  const app = createAgentApp({
+    agentGraph,
+    oauthSecret: env.OAUTH_SECRET,
+    oauthClients,
+    corsOrigins: CORS_ORIGINS,
+    rateLimiterPoints: RATE_LIMITER_POINTS,
+    rateLimiterDuration: RATE_LIMITER_DURATION,
+  });
 
   const server = app.listen(env.PORT, () => {
     logger.info({ port: env.PORT }, 'Agent service ready');
@@ -83,6 +95,7 @@ async function main(): Promise<void> {
   registry.register('http-server', () =>
     new Promise<void>((resolve) => {
       server.close(() => { resolve(); });
+      setTimeout(() => { resolve(); }, CONNECTION_DRAIN_TIMEOUT);
     }),
   );
   registry.register('mcp-client', async () => {
