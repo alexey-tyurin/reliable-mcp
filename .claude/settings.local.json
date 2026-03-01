@@ -4,7 +4,14 @@
       "Bash(npm install)",
       "Bash(npm view @langchain/langgraph@latest version)",
       "Bash(npm view @langchain/core@latest version)",
-      "Bash(npm view @langchain/openai@latest version)"
+      "Bash(npm view @langchain/openai@latest version)",
+      "Bash(npx vitest run tests/unit/agent-nodes.test.ts)",
+      "Bash(npx vitest run tests/unit/agent-graph.test.ts)",
+      "Bash(npx vitest run tests/unit/mcp-client.test.ts)",
+      "Bash(npx vitest run tests/unit/mcp-client.test.ts tests/unit/session-store.test.ts tests/unit/agent-state.test.ts tests/unit/agent-nodes.test.ts tests/unit/agent-graph.test.ts)",
+      "Bash(npx vitest run tests/unit/)",
+      "Bash(npm run lint)",
+      "Bash(npx tsc --noEmit)"
     ]
   }
 }
