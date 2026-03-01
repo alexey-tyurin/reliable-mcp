@@ -26,7 +26,12 @@
       "Bash(npx vitest run tests/unit/chaos-redis-interceptor.test.ts)",
       "Bash(npx vitest run tests/unit/chaos-auth-interceptor.test.ts)",
       "Bash(CHAOS_ENABLED=true npx vitest run tests/chaos/)",
-      "Bash(npm run build:prod)"
+      "Bash(npm run build:prod)",
+      "Bash(npx vitest run tests/unit/eval-tool-selection.test.ts tests/unit/eval-response-quality.test.ts tests/unit/eval-latency-budget.test.ts tests/unit/eval-resilience.test.ts tests/unit/eval-report.test.ts tests/unit/eval-runner.test.ts)",
+      "Bash(npx vitest run)",
+      "Bash(npm run eval:quick)",
+      "Bash(npm run eval)",
+      "Bash(npm run eval:resilience)"
     ]
   }
 }

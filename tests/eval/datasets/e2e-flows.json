@@ -1,0 +1,156 @@
+[
+  {
+    "name": "basic-weather-followup",
+    "turns": [
+      { "role": "user", "content": "What's the weather in London?" },
+      { "role": "user", "content": "And how about Paris?" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [["get_weather"], ["get_weather"]]
+    }
+  },
+  {
+    "name": "flight-then-weather",
+    "turns": [
+      { "role": "user", "content": "Is flight TEST001 on time?" },
+      { "role": "user", "content": "What's the weather at the destination?" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [["get_flight_status"], ["get_weather"]]
+    }
+  },
+  {
+    "name": "combined-query-single-turn",
+    "turns": [
+      { "role": "user", "content": "Weather in Tokyo and status of flight TEST002" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [["get_weather", "get_flight_status"]]
+    }
+  },
+  {
+    "name": "no-tool-then-weather",
+    "turns": [
+      { "role": "user", "content": "Hello, what can you do?" },
+      { "role": "user", "content": "OK, what's the weather in Berlin?" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [[], ["get_weather"]]
+    }
+  },
+  {
+    "name": "session-memory-recall",
+    "turns": [
+      { "role": "user", "content": "Check the weather in Sydney" },
+      { "role": "user", "content": "Was it warm there?" }
+    ],
+    "assertions": {
+      "session_memory_keys": ["messages"],
+      "tools_called_per_turn": [["get_weather"], []]
+    }
+  },
+  {
+    "name": "multiple-flights-sequential",
+    "turns": [
+      { "role": "user", "content": "What's the status of TEST001?" },
+      { "role": "user", "content": "And TEST003?" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [["get_flight_status"], ["get_flight_status"]]
+    }
+  },
+  {
+    "name": "weather-cache-hit",
+    "turns": [
+      { "role": "user", "content": "Weather in London" },
+      { "role": "user", "content": "What's the temperature in London?" }
+    ],
+    "assertions": {
+      "cache_hit_expected": true,
+      "tools_called_per_turn": [["get_weather"], ["get_weather"]]
+    }
+  },
+  {
+    "name": "error-recovery-conversation",
+    "turns": [
+      { "role": "user", "content": "Weather in London" },
+      { "role": "user", "content": "Thanks! Now check flight TEST004" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [["get_weather"], ["get_flight_status"]]
+    }
+  },
+  {
+    "name": "three-turn-mixed",
+    "turns": [
+      { "role": "user", "content": "Hi there!" },
+      { "role": "user", "content": "What's the weather in Dubai?" },
+      { "role": "user", "content": "Check flight TEST001 too" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [[], ["get_weather"], ["get_flight_status"]]
+    }
+  },
+  {
+    "name": "repeated-same-query",
+    "turns": [
+      { "role": "user", "content": "Weather in Paris" },
+      { "role": "user", "content": "Weather in Paris" }
+    ],
+    "assertions": {
+      "cache_hit_expected": true,
+      "tools_called_per_turn": [["get_weather"], ["get_weather"]]
+    }
+  },
+  {
+    "name": "cancelled-flight-inquiry",
+    "turns": [
+      { "role": "user", "content": "Is TEST003 cancelled?" },
+      { "role": "user", "content": "Are there alternative flights?" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [["get_flight_status"], []]
+    }
+  },
+  {
+    "name": "weather-then-combined",
+    "turns": [
+      { "role": "user", "content": "Temperature in Moscow" },
+      { "role": "user", "content": "Now tell me weather in Tokyo and flight TEST001 status" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [["get_weather"], ["get_weather", "get_flight_status"]]
+    }
+  },
+  {
+    "name": "greeting-weather-thanks",
+    "turns": [
+      { "role": "user", "content": "Good morning!" },
+      { "role": "user", "content": "What's the weather in Rome?" },
+      { "role": "user", "content": "Thank you!" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [[], ["get_weather"], []]
+    }
+  },
+  {
+    "name": "ambiguous-then-specific",
+    "turns": [
+      { "role": "user", "content": "Tell me about my trip" },
+      { "role": "user", "content": "I'm flying TEST002 to Berlin. Weather there and flight status?" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [[], ["get_weather", "get_flight_status"]]
+    }
+  },
+  {
+    "name": "in-air-flight-followup",
+    "turns": [
+      { "role": "user", "content": "Where is flight TEST004 right now?" },
+      { "role": "user", "content": "What's the weather at the arrival city?" }
+    ],
+    "assertions": {
+      "tools_called_per_turn": [["get_flight_status"], ["get_weather"]]
+    }
+  }
+]

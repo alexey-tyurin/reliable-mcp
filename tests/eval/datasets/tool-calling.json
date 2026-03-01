@@ -1,0 +1,179 @@
+[
+  {
+    "input": "What's the temperature in Paris?",
+    "expected_tools": ["get_weather"],
+    "expected_params_subset": { "city": "Paris" },
+    "category": "weather-only"
+  },
+  {
+    "input": "How's the weather in London right now?",
+    "expected_tools": ["get_weather"],
+    "expected_params_subset": { "city": "London" },
+    "category": "weather-only"
+  },
+  {
+    "input": "Tell me the weather in Tokyo",
+    "expected_tools": ["get_weather"],
+    "expected_params_subset": { "city": "Tokyo" },
+    "category": "weather-only"
+  },
+  {
+    "input": "Is it cold in Moscow?",
+    "expected_tools": ["get_weather"],
+    "expected_params_subset": { "city": "Moscow" },
+    "category": "weather-only"
+  },
+  {
+    "input": "What's the weather like in Sydney?",
+    "expected_tools": ["get_weather"],
+    "expected_params_subset": { "city": "Sydney" },
+    "category": "weather-only"
+  },
+  {
+    "input": "Temperature in Berlin please",
+    "expected_tools": ["get_weather"],
+    "expected_params_subset": { "city": "Berlin" },
+    "category": "weather-only"
+  },
+  {
+    "input": "How warm is it in Dubai?",
+    "expected_tools": ["get_weather"],
+    "expected_params_subset": { "city": "Dubai" },
+    "category": "weather-only"
+  },
+  {
+    "input": "Give me the weather for New York",
+    "expected_tools": ["get_weather"],
+    "expected_params_subset": { "city": "New York" },
+    "category": "weather-only"
+  },
+  {
+    "input": "Is BA456 on time?",
+    "expected_tools": ["get_flight_status"],
+    "expected_params_subset": { "flight_number": "BA456" },
+    "category": "flight-only"
+  },
+  {
+    "input": "What's the status of flight UA123?",
+    "expected_tools": ["get_flight_status"],
+    "expected_params_subset": { "flight_number": "UA123" },
+    "category": "flight-only"
+  },
+  {
+    "input": "Has flight DL789 landed yet?",
+    "expected_tools": ["get_flight_status"],
+    "expected_params_subset": { "flight_number": "DL789" },
+    "category": "flight-only"
+  },
+  {
+    "input": "Check flight TEST001 for me",
+    "expected_tools": ["get_flight_status"],
+    "expected_params_subset": { "flight_number": "TEST001" },
+    "category": "flight-only"
+  },
+  {
+    "input": "Is TEST002 delayed?",
+    "expected_tools": ["get_flight_status"],
+    "expected_params_subset": { "flight_number": "TEST002" },
+    "category": "flight-only"
+  },
+  {
+    "input": "Flight status for AA100",
+    "expected_tools": ["get_flight_status"],
+    "expected_params_subset": { "flight_number": "AA100" },
+    "category": "flight-only"
+  },
+  {
+    "input": "When does LH440 arrive?",
+    "expected_tools": ["get_flight_status"],
+    "expected_params_subset": { "flight_number": "LH440" },
+    "category": "flight-only"
+  },
+  {
+    "input": "What's the weather in NYC and is flight UA123 on time?",
+    "expected_tools": ["get_weather", "get_flight_status"],
+    "category": "combined"
+  },
+  {
+    "input": "Tell me the temperature in London and the status of BA456",
+    "expected_tools": ["get_weather", "get_flight_status"],
+    "category": "combined"
+  },
+  {
+    "input": "I need weather for Paris and flight TEST001 status",
+    "expected_tools": ["get_weather", "get_flight_status"],
+    "category": "combined"
+  },
+  {
+    "input": "Check the weather in Tokyo and flight DL789",
+    "expected_tools": ["get_weather", "get_flight_status"],
+    "category": "combined"
+  },
+  {
+    "input": "Weather in Berlin and is flight LH440 delayed?",
+    "expected_tools": ["get_weather", "get_flight_status"],
+    "category": "combined"
+  },
+  {
+    "input": "Tell me about my trip",
+    "expected_tools": [],
+    "category": "ambiguous"
+  },
+  {
+    "input": "I'm going to Rome next week, any tips?",
+    "expected_tools": [],
+    "category": "ambiguous"
+  },
+  {
+    "input": "Help me plan my vacation",
+    "expected_tools": [],
+    "category": "ambiguous"
+  },
+  {
+    "input": "What can you help me with?",
+    "expected_tools": [],
+    "category": "no-tool"
+  },
+  {
+    "input": "Hello, who are you?",
+    "expected_tools": [],
+    "category": "no-tool"
+  },
+  {
+    "input": "Thanks for your help!",
+    "expected_tools": [],
+    "category": "no-tool"
+  },
+  {
+    "input": "What's the weather in Chicago and also in Miami?",
+    "expected_tools": ["get_weather"],
+    "category": "multi-city-weather"
+  },
+  {
+    "input": "Compare the weather between Boston and Seattle",
+    "expected_tools": ["get_weather"],
+    "category": "multi-city-weather"
+  },
+  {
+    "input": "Is flight TEST003 on time? I'm flying on January 15th",
+    "expected_tools": ["get_flight_status"],
+    "expected_params_subset": { "flight_number": "TEST003" },
+    "category": "flight-with-date"
+  },
+  {
+    "input": "Flight AA100 status for tomorrow",
+    "expected_tools": ["get_flight_status"],
+    "expected_params_subset": { "flight_number": "AA100" },
+    "category": "flight-with-date"
+  },
+  {
+    "input": "Wether in Prais?",
+    "expected_tools": ["get_weather"],
+    "category": "misspelled-city"
+  },
+  {
+    "input": "Tempurature in Londn",
+    "expected_tools": ["get_weather"],
+    "category": "misspelled-city"
+  }
+]
