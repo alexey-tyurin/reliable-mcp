@@ -2,6 +2,22 @@
 
 A production-ready chatbot that answers weather and flight status questions using **MCP servers**, **LangGraphJS agent orchestration**, and comprehensive reliability patterns. Supports combined queries ("weather in NYC and flight UA123 status?") in a single request.
 
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Key Features](#key-features)
+- [Quick Start](#quick-start)
+- [Environment Variables](#environment-variables)
+- [API Usage](#api-usage)
+- [Docker Commands Reference](#docker-commands-reference)
+- [Testing](#testing)
+- [Evaluation Guide](#evaluation-guide)
+- [Monitoring & Observability](#monitoring--observability)
+- [Deployment Guide](#deployment-guide)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [License](#license)
+
 ## Architecture
 
 ```mermaid
@@ -251,6 +267,15 @@ docker compose down -v            # Stop and remove volumes
 
 ## Testing
 
+**317 test cases** across 38 test files + **63 evaluation cases** across 3 datasets:
+
+| Category | Files | Test Cases | Description |
+|----------|------:|----------:|----|
+| Unit | 34 | 285 | Fast, no Docker needed — agent, MCP, resilience, cache, auth, chaos, eval |
+| Integration | 2 | 11 | Requires Redis — MCP weather & flight servers end-to-end |
+| Chaos | 2 | 21 | Fault injection — failure scenarios & recovery |
+| Evaluation | 3 datasets | 63 | Tool-calling (32), edge-cases (16), e2e-flows (15) |
+
 ### TDD Workflow
 
 ```bash
@@ -312,7 +337,7 @@ npm run eval                 # Full suite (~5 min)
 
 | Dataset | Cases | Description |
 |---------|-------|-------------|
-| `tool-calling.json` | 30 | Weather, flight, combined, ambiguous, no-tool queries |
+| `tool-calling.json` | 32 | Weather, flight, combined, ambiguous, no-tool queries |
 | `edge-cases.json` | 16 | Prompt injection, SQL injection, XSS, gibberish, special chars |
 | `e2e-flows.json` | 15 | Multi-turn conversation flows (follow-ups, session memory, cache hits, mixed queries) |
 
