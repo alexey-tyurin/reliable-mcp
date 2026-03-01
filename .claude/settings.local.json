@@ -31,7 +31,26 @@
       "Bash(npx vitest run)",
       "Bash(npm run eval:quick)",
       "Bash(npm run eval)",
-      "Bash(npm run eval:resilience)"
+      "Bash(npm run eval:resilience)",
+      "Bash(docker compose down)",
+      "Bash(open -a \"Docker Desktop\")",
+      "Bash(open -a \"Docker\")",
+      "Bash(docker compose build)",
+      "Bash(docker compose up -d)",
+      "Bash(docker compose exec redis redis-cli ping)",
+      "Bash(curl -sf http://localhost:3001/health)",
+      "Bash(curl -sf http://localhost:3002/health)",
+      "Bash(curl -sf http://localhost:3000/health)",
+      "Bash(docker compose restart agent)",
+      "Bash(docker compose build --quiet)",
+      "Bash(python3 -c \":*)",
+      "Bash(__NEW_LINE_249c0f4ccb245918__ echo \"\")",
+      "Bash(curl -sf -X POST http://localhost:3000/chat -H \"Authorization: Bearer $ACCESS_TOKEN\" -H \"Content-Type: application/json\" -d '{\"\"message\"\":\"\"Is my flight still on time?\"\",\"\"sessionId\"\":\"\"session-memory-test-2\"\"}')",
+      "Bash(docker compose exec redis redis-cli get \"session:default-client:session-memory-test-2\")",
+      "Bash(__NEW_LINE_f6eb1f6f7e555907__ echo \"\")",
+      "Bash(curl -sf -X POST http://localhost:3000/chat -H \"Authorization: Bearer $ACCESS_TOKEN\" -H \"Content-Type: application/json\" -d '{\"\"message\"\":\"\"Is my flight still on time?\"\",\"\"sessionId\"\":\"\"session-mem-v2\"\"}')",
+      "Bash(docker compose exec redis redis-cli get \"session:default-client:session-mem-v2\")",
+      "Bash(npm run test:unit)"
     ]
   }
 }

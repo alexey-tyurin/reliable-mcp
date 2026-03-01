@@ -181,6 +181,33 @@ export function createMcpClientManager(
     );
   }
 
+  function isStaleSessionError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return message.includes('Server not initialized') || message.includes('session');
+  }
+
+  async function reconnectServer(server: ServerConnection): Promise<boolean> {
+    try {
+      await server.client.close();
+    } catch {
+      // Ignore close errors during reconnection
+    }
+
+    try {
+      await server.client.connect(server.url);
+      server.connected = true;
+      const { tools } = await server.client.listTools();
+      server.tools = tools;
+      logger.info({ url: server.url }, 'MCP server reconnected');
+      return true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn({ url: server.url, error: message }, 'MCP server reconnection failed');
+      server.connected = false;
+      return false;
+    }
+  }
+
   async function callTool(toolCall: McpToolCall): Promise<McpToolResult> {
     const server = findServerForTool(toolCall.name);
 
@@ -204,8 +231,29 @@ export function createMcpClientManager(
         isError: result.isError === true,
       };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error({ toolName: toolCall.name, error: message }, 'MCP tool call failed');
+      if (isStaleSessionError(error)) {
+        logger.info({ toolName: toolCall.name }, 'Stale session detected, reconnecting');
+        const reconnected = await reconnectServer(server);
+        if (reconnected) {
+          try {
+            const retryResult = await server.client.callTool({
+              name: toolCall.name,
+              arguments: toolCall.arguments,
+            });
+            return {
+              toolName: toolCall.name,
+              content: extractTextContent(retryResult),
+              isError: retryResult.isError === true,
+            };
+          } catch (retryError: unknown) {
+            const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+            logger.error({ toolName: toolCall.name, error: retryMessage }, 'MCP tool call failed after reconnect');
+          }
+        }
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error({ toolName: toolCall.name, error: message }, 'MCP tool call failed');
+      }
 
       return {
         toolName: toolCall.name,

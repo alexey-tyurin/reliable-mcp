@@ -11,6 +11,7 @@ import { createAgentApp } from '../agent/agent-http.js';
 import type { LlmLike, LangChainTool } from '../agent/nodes.js';
 import { ChatOpenAI } from '@langchain/openai';
 import type { BaseMessage } from '@langchain/core/messages';
+import { Client as LangSmithClient } from 'langsmith';
 
 const CORS_ORIGINS = ['http://localhost:3000'];
 const RATE_LIMITER_POINTS = 30;
@@ -69,11 +70,21 @@ async function main(): Promise<void> {
   });
   const llm = wrapChatModel(chatModel);
 
-  const agentGraph = createAgentGraph({
+  const langSmithClient = env.LANGSMITH_API_KEY
+    ? new LangSmithClient({ apiKey: env.LANGSMITH_API_KEY })
+    : undefined;
+
+  const graphConfig: Parameters<typeof createAgentGraph>[0] = {
     llm,
     mcpManager,
     sessionStore,
-  });
+  };
+
+  if (langSmithClient) {
+    graphConfig.langSmithClient = langSmithClient;
+  }
+
+  const agentGraph = createAgentGraph(graphConfig);
 
   const oauthClients = new Map<string, string>([
     ['default-client', env.OAUTH_SECRET],

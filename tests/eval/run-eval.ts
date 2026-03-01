@@ -340,11 +340,72 @@ export async function runResilienceOnlyEval(config: EvalConfig): Promise<EvalSum
 
 const TOOL_ACCURACY_THRESHOLD = 90;
 
+async function pushToLangSmith(summary: EvalSummary): Promise<void> {
+  const { Client } = await import('langsmith');
+  const client = new Client();
+
+  const datasetName = 'mcp-chatbot-eval';
+  const experimentName = `eval-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}`;
+
+  let dataset;
+  try {
+    dataset = await client.readDataset({ datasetName });
+  } catch {
+    dataset = await client.createDataset(datasetName, {
+      description: 'MCP Chatbot tool-calling evaluation dataset',
+    });
+  }
+
+  const toolCallingData = loadDataset<ToolCallingTestCase>('tool-calling');
+
+  const existingExamples = [];
+  for await (const example of client.listExamples({ datasetId: dataset.id })) {
+    existingExamples.push(example);
+  }
+
+  if (existingExamples.length === 0) {
+    await client.createExamples({
+      inputs: toolCallingData.map((tc) => ({ message: tc.input, category: tc.category })),
+      outputs: toolCallingData.map((tc) => ({ expected_tools: tc.expected_tools })),
+      datasetId: dataset.id,
+    });
+  }
+
+  const { evaluate } = await import('langsmith/evaluation');
+  const { createMockAgentRunner } = await import('./mock-agent-runner.js');
+  const runner = createMockAgentRunner();
+
+  await evaluate(
+    async (input: Record<string, unknown>) => {
+      const inputs = (input['inputs'] ?? input) as Record<string, unknown>;
+      const message = String(inputs['message'] ?? '');
+      const result = await runner.invoke(message);
+      return { tools_called: result.toolsCalled, response: result.response };
+    },
+    {
+      data: datasetName,
+      experimentPrefix: experimentName,
+      metadata: {
+        tool_accuracy_pct: summary.toolAccuracyPct,
+        total: summary.total,
+        passed: summary.passed,
+        failed: summary.failed,
+        latency_p50_ms: summary.latencyP50Ms,
+        latency_p95_ms: summary.latencyP95Ms,
+        critical_failures: summary.criticalFailures.length,
+      },
+    },
+  );
+
+  process.stdout.write(`\nLangSmith experiment "${experimentName}" pushed to dataset "${datasetName}"\n`);
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const isQuick = args.includes('--quick');
   const isResilience = args.includes('--resilience');
   const writeReport = args.includes('--report');
+  const isLangSmith = args.includes('--langsmith');
 
   process.env['FLIGHT_PROVIDER'] = process.env['FLIGHT_PROVIDER'] ?? 'mock';
 
@@ -366,6 +427,10 @@ async function main(): Promise<void> {
 
   if (writeReport) {
     writeReportToFile(summary, resolve(currentDir, '../../eval-report.json'));
+  }
+
+  if (isLangSmith) {
+    await pushToLangSmith(summary);
   }
 
   const shouldFail = summary.toolAccuracyPct < TOOL_ACCURACY_THRESHOLD

@@ -1,5 +1,6 @@
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage, ToolMessage } from '@langchain/core/messages';
 import type { BaseMessage } from '@langchain/core/messages';
+import type { ToolCall } from '@langchain/core/messages/tool';
 import { createLogger } from '../observability/logger.js';
 
 const DEFAULT_TTL_SECONDS = 86400;
@@ -10,9 +11,18 @@ export interface RedisLike {
   status: string;
 }
 
+interface SerializedToolCall {
+  name: string;
+  args: Record<string, unknown>;
+  id?: string;
+  type?: string;
+}
+
 interface SerializedMessage {
   type: string;
   content: string;
+  tool_calls?: SerializedToolCall[];
+  tool_call_id?: string;
 }
 
 interface SessionStoreOptions {
@@ -29,10 +39,30 @@ function buildKey(userId: string, sessionId: string): string {
 }
 
 function serializeMessages(messages: BaseMessage[]): string {
-  const serialized: SerializedMessage[] = messages.map((msg) => ({
-    type: msg._getType(),
-    content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-  }));
+  const serialized: SerializedMessage[] = messages.map((msg) => {
+    const base: SerializedMessage = {
+      type: msg._getType(),
+      content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+    };
+
+    if (msg._getType() === 'ai') {
+      const aiMsg = msg as AIMessage;
+      if (aiMsg.tool_calls && aiMsg.tool_calls.length > 0) {
+        base.tool_calls = aiMsg.tool_calls.map((tc) => {
+          const serialized: SerializedToolCall = { name: tc.name, args: tc.args as Record<string, unknown> };
+          if (tc.id !== undefined) { serialized.id = tc.id; }
+          if (tc.type !== undefined) { serialized.type = tc.type; }
+          return serialized;
+        });
+      }
+    }
+
+    if (msg._getType() === 'tool') {
+      base.tool_call_id = (msg as ToolMessage).tool_call_id;
+    }
+
+    return base;
+  });
   return JSON.stringify(serialized);
 }
 
@@ -42,8 +72,23 @@ function deserializeMessages(raw: string): BaseMessage[] {
     switch (item.type) {
       case 'human':
         return new HumanMessage(item.content);
-      case 'ai':
+      case 'ai': {
+        if (item.tool_calls && item.tool_calls.length > 0) {
+          const toolCalls: ToolCall[] = item.tool_calls.map((tc) => ({
+            name: tc.name,
+            args: tc.args as Record<string, unknown>,
+            ...(tc.id !== undefined ? { id: tc.id } : {}),
+            type: 'tool_call' as const,
+          }));
+          return new AIMessage({ content: item.content, tool_calls: toolCalls });
+        }
         return new AIMessage(item.content);
+      }
+      case 'tool':
+        return new ToolMessage({
+          content: item.content,
+          tool_call_id: item.tool_call_id ?? '',
+        });
       default:
         return new HumanMessage(item.content);
     }

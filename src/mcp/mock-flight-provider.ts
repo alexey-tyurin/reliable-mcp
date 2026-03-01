@@ -10,6 +10,9 @@ const FLIGHT_NUMBER_TO_FIXTURE: Record<string, string> = {
   TEST002: 'delayed.json',
   TEST003: 'cancelled.json',
   TEST004: 'in-air.json',
+  UA123: 'on-time.json',
+  BA456: 'delayed.json',
+  DL789: 'cancelled.json',
 };
 
 export function createMockFlightProvider(fixturesDir: string): FlightProvider {
