@@ -86,7 +86,7 @@ graph TB
 
 ```bash
 # Clone and install
-git clone <repo-url>
+git clone https://github.com/alexey-tyurin/reliable-mcp.git
 cd reliable-mcp
 npm install
 
@@ -314,7 +314,7 @@ npm run eval                 # Full suite (~5 min)
 |---------|-------|-------------|
 | `tool-calling.json` | 30 | Weather, flight, combined, ambiguous, no-tool queries |
 | `edge-cases.json` | 16 | Prompt injection, SQL injection, XSS, gibberish, special chars |
-| `e2e-flows.json` | | End-to-end conversation flows |
+| `e2e-flows.json` | 15 | Multi-turn conversation flows (follow-ups, session memory, cache hits, mixed queries) |
 
 ### Evaluators
 
