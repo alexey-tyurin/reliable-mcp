@@ -11,7 +11,10 @@
       "Bash(npx vitest run tests/unit/mcp-client.test.ts tests/unit/session-store.test.ts tests/unit/agent-state.test.ts tests/unit/agent-nodes.test.ts tests/unit/agent-graph.test.ts)",
       "Bash(npx vitest run tests/unit/)",
       "Bash(npm run lint)",
-      "Bash(npx tsc --noEmit)"
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx vitest run tests/unit/cosine-similarity.test.ts)",
+      "Bash(npx vitest run tests/unit/semantic-cache.test.ts)",
+      "Bash(npx vitest run tests/unit/cosine-similarity.test.ts tests/unit/semantic-cache.test.ts)"
     ]
   }
 }
