@@ -1,0 +1,16 @@
+{
+  "flight_number": "TEST002",
+  "airline": "Test Airlines",
+  "status": "delayed",
+  "departure": {
+    "airport": "ORD",
+    "scheduled": "2025-01-15T14:00:00Z",
+    "actual": "2025-01-15T14:47:00Z"
+  },
+  "arrival": {
+    "airport": "MIA",
+    "scheduled": "2025-01-15T18:30:00Z",
+    "estimated": "2025-01-15T19:15:00Z"
+  },
+  "delay_minutes": 45
+}

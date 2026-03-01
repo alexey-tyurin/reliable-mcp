@@ -36,3 +36,61 @@ export const WeatherApiResponseSchema = z.object({
 export type WeatherInput = z.infer<typeof WeatherInputSchema>;
 export type WeatherOutput = z.infer<typeof WeatherOutputSchema>;
 export type WeatherApiResponse = z.infer<typeof WeatherApiResponseSchema>;
+
+const FLIGHT_STATUSES = [
+  'scheduled',
+  'boarding',
+  'in_air',
+  'landed',
+  'cancelled',
+  'delayed',
+] as const;
+
+export const FlightInputSchema = z.object({
+  flight_number: z
+    .string()
+    .describe("IATA flight number (e.g., 'UA123', 'BA456')"),
+  date: z
+    .string()
+    .date()
+    .optional()
+    .describe('Flight date in YYYY-MM-DD format. Defaults to today.'),
+});
+
+const flightEndpointSchema = z.object({
+  airport: z.string(),
+  scheduled: z.string().datetime(),
+  actual: z.string().datetime().nullable(),
+  estimated: z.string().datetime().nullable(),
+});
+
+export const FlightOutputSchema = z.object({
+  flight_number: z.string(),
+  airline: z.string(),
+  status: z.enum(FLIGHT_STATUSES),
+  departure: flightEndpointSchema,
+  arrival: flightEndpointSchema,
+  delay_minutes: z.number().int().min(0),
+  timestamp: z.string().datetime(),
+});
+
+export const FlightFixtureSchema = z.object({
+  flight_number: z.string(),
+  airline: z.string(),
+  status: z.enum(FLIGHT_STATUSES),
+  departure: z.object({
+    airport: z.string(),
+    scheduled: z.string().datetime(),
+    actual: z.string().datetime().nullable(),
+  }),
+  arrival: z.object({
+    airport: z.string(),
+    scheduled: z.string().datetime(),
+    estimated: z.string().datetime().nullable(),
+  }),
+  delay_minutes: z.number().int().min(0),
+});
+
+export type FlightInput = z.infer<typeof FlightInputSchema>;
+export type FlightOutput = z.infer<typeof FlightOutputSchema>;
+export type FlightFixture = z.infer<typeof FlightFixtureSchema>;
