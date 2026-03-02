@@ -7,9 +7,9 @@ import {
 import type { MetricsTracker } from '../../src/observability/metrics.js';
 
 describe('estimateTokenCost', () => {
-  it('calculates cost for gpt-5-nano', () => {
-    const cost = estimateTokenCost('gpt-5-nano', 100, 50);
-    const nanoCost = MODEL_COSTS.get('gpt-5-nano')!;
+  it('calculates cost for gpt-4o-mini', () => {
+    const cost = estimateTokenCost('gpt-4o-mini', 100, 50);
+    const nanoCost = MODEL_COSTS.get('gpt-4o-mini')!;
     const expected = 100 * nanoCost.input + 50 * nanoCost.output;
     expect(cost).toBeCloseTo(expected, 10);
   });
@@ -22,7 +22,7 @@ describe('estimateTokenCost', () => {
   });
 
   it('returns zero for zero tokens', () => {
-    const cost = estimateTokenCost('gpt-5-nano', 0, 0);
+    const cost = estimateTokenCost('gpt-4o-mini', 0, 0);
     expect(cost).toBe(0);
   });
 

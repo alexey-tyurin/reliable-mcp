@@ -192,7 +192,7 @@ async function createChaosTestHarness(): Promise<ChaosTestHarness> {
   }
 
   const chatModel = new ChatOpenAI({
-    modelName: 'gpt-5-nano',
+    modelName: 'gpt-4o-mini',
     openAIApiKey: openaiApiKey,
   });
   const llm = wrapChatModel(chatModel, callLogs);

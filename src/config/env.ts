@@ -22,6 +22,8 @@ const agentSchema = baseSchema.extend({
   OAUTH_SECRET: z.string().min(1),
   WEATHER_MCP_URL: z.string().url().default('http://localhost:3001/mcp'),
   FLIGHT_MCP_URL: z.string().url().default('http://localhost:3002/mcp'),
+  RATE_LIMITER_POINTS: z.coerce.number().int().positive().default(30),
+  RATE_LIMITER_DURATION: z.coerce.number().int().positive().default(60),
 });
 
 const weatherMcpSchema = baseSchema.extend({

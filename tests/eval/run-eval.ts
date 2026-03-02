@@ -86,6 +86,14 @@ function determineCallType(tools: string[]): 'none' | 'single' | 'combined' {
   return 'combined';
 }
 
+function formatToolList(tools: string[]): string {
+  return tools.length === 0 ? '(none)' : `[${tools.join(', ')}]`;
+}
+
+function truncate(text: string, maxLen: number): string {
+  return text.length <= maxLen ? text : text.slice(0, maxLen - 3) + '...';
+}
+
 async function runToolCallingEval(
   dataset: ToolCallingTestCase[],
   runner: AgentRunner,
@@ -95,6 +103,8 @@ async function runToolCallingEval(
 }> {
   const results: { input: string; score: number; reason: string; latencyMs: number }[] = [];
   const criticalFailures: CriticalFailure[] = [];
+
+  process.stdout.write('\n  TOOL CALLING EVAL\n');
 
   for (const testCase of dataset) {
     try {
@@ -114,7 +124,22 @@ async function runToolCallingEval(
         latencyMs: agentResult.latencyMs,
       });
 
+      const label = toolResult.score >= 1.0 ? 'PASS' : 'FAIL';
+      const inputPreview = truncate(testCase.input, 55);
+      const expected = formatToolList(testCase.expected_tools);
+      const actual = formatToolList(agentResult.toolsCalled);
+
+      if (toolResult.score >= 1.0) {
+        process.stdout.write(`  [${label}] "${inputPreview}" → ${actual} (${String(agentResult.latencyMs)}ms)\n`);
+      } else {
+        process.stdout.write(`  [${label}] "${inputPreview}"\n`);
+        process.stdout.write(`         expected: ${expected}  got: ${actual}\n`);
+        process.stdout.write(`         reason: ${toolResult.reason}\n`);
+        process.stdout.write(`         response: "${truncate(agentResult.response, 80)}"\n`);
+      }
+
       if (!latencyResult.pass) {
+        process.stdout.write(`         LATENCY EXCEEDED: ${String(latencyResult.actualMs)}ms > ${String(latencyResult.budgetMs)}ms budget\n`);
         criticalFailures.push({
           testCase: testCase.input.slice(0, 60),
           reason: `Latency ${latencyResult.actualMs}ms exceeded budget ${latencyResult.budgetMs}ms`,
@@ -122,6 +147,8 @@ async function runToolCallingEval(
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
+      process.stdout.write(`  [ERR]  "${truncate(testCase.input, 55)}"\n`);
+      process.stdout.write(`         ${message}\n`);
       results.push({ input: testCase.input, score: 0, reason: `Error: ${message}`, latencyMs: 0 });
       criticalFailures.push({
         testCase: testCase.input.slice(0, 60),
@@ -129,6 +156,8 @@ async function runToolCallingEval(
       });
     }
   }
+
+  process.stdout.write('\n');
 
   return { results, criticalFailures };
 }
@@ -138,6 +167,8 @@ async function runEdgeCaseEval(
   runner: AgentRunner,
 ): Promise<{ criticalFailures: CriticalFailure[] }> {
   const criticalFailures: CriticalFailure[] = [];
+
+  process.stdout.write('  EDGE CASE EVAL\n');
 
   for (const testCase of dataset) {
     const input = expandLongInput(testCase.input);
@@ -149,10 +180,12 @@ async function runEdgeCaseEval(
     try {
       const agentResult = await runner.invoke(input);
       const bodyString = JSON.stringify(agentResult.rawBody);
+      let caseFailed = false;
 
       if (testCase.assertions.no_stack_trace) {
         const stackPattern = /at\s+\w+\s*\(.*:\d+:\d+\)/;
         if (stackPattern.test(bodyString)) {
+          caseFailed = true;
           criticalFailures.push({
             testCase: `edge:${testCase.category}`,
             reason: 'Stack trace leaked in response',
@@ -163,6 +196,7 @@ async function runEdgeCaseEval(
       if (testCase.assertions.should_not_contain) {
         for (const forbidden of testCase.assertions.should_not_contain) {
           if (bodyString.toLowerCase().includes(forbidden.toLowerCase())) {
+            caseFailed = true;
             criticalFailures.push({
               testCase: `edge:${testCase.category}`,
               reason: `Response contains forbidden content: "${forbidden}"`,
@@ -170,8 +204,17 @@ async function runEdgeCaseEval(
           }
         }
       }
+
+      const label = caseFailed ? 'FAIL' : 'PASS';
+      const inputPreview = truncate(input, 50);
+      process.stdout.write(`  [${label}] edge:${testCase.category} "${inputPreview}" (${String(agentResult.latencyMs)}ms)\n`);
+      if (caseFailed) {
+        process.stdout.write(`         response: "${truncate(agentResult.response, 80)}"\n`);
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
+      process.stdout.write(`  [ERR]  edge:${testCase.category} "${truncate(input, 50)}"\n`);
+      process.stdout.write(`         ${message}\n`);
       criticalFailures.push({
         testCase: `edge:${testCase.category}`,
         reason: `Execution error: ${message}`,
@@ -179,45 +222,184 @@ async function runEdgeCaseEval(
     }
   }
 
+  process.stdout.write('\n');
+
   return { criticalFailures };
+}
+
+interface ResilienceScenario {
+  name: string;
+  description: string;
+  run: (runner: AgentRunner) => Promise<ResilienceScenarioResult>;
+}
+
+interface ResilienceScenarioResult {
+  passed: boolean;
+  reason: string;
+  latencyMs: number;
+  details: string;
+}
+
+function createEndToEndScenarios(): ResilienceScenario[] {
+  return [
+    {
+      name: 'weather-e2e',
+      description: 'Weather query returns real data with correct tool',
+      run: async (runner) => {
+        const result = await runner.invoke('What is the weather in London?');
+        const toolResult = evaluateToolSelection(result.toolsCalled, ['get_weather']);
+        const hasContent = result.response.length > 0 && result.statusCode === 200;
+        const passed = toolResult.score >= 1.0 && hasContent;
+        return {
+          passed,
+          reason: passed ? 'Correct tool, valid response' : `${toolResult.reason}; status=${String(result.statusCode)}`,
+          latencyMs: result.latencyMs,
+          details: `tools=${formatToolList(result.toolsCalled)} response="${truncate(result.response, 80)}"`,
+        };
+      },
+    },
+    {
+      name: 'flight-e2e',
+      description: 'Flight query returns real data with correct tool',
+      run: async (runner) => {
+        const result = await runner.invoke('Check flight TEST001');
+        const toolResult = evaluateToolSelection(result.toolsCalled, ['get_flight_status']);
+        const hasContent = result.response.length > 0 && result.statusCode === 200;
+        const passed = toolResult.score >= 1.0 && hasContent;
+        return {
+          passed,
+          reason: passed ? 'Correct tool, valid response' : `${toolResult.reason}; status=${String(result.statusCode)}`,
+          latencyMs: result.latencyMs,
+          details: `tools=${formatToolList(result.toolsCalled)} response="${truncate(result.response, 80)}"`,
+        };
+      },
+    },
+    {
+      name: 'combined-e2e',
+      description: 'Combined query uses both tools in single request',
+      run: async (runner) => {
+        const result = await runner.invoke('Weather in Paris and status of TEST002');
+        const toolResult = evaluateToolSelection(result.toolsCalled, ['get_weather', 'get_flight_status']);
+        const hasContent = result.response.length > 0 && result.statusCode === 200;
+        const passed = toolResult.score >= 1.0 && hasContent;
+        return {
+          passed,
+          reason: passed ? 'Both tools called, valid response' : `${toolResult.reason}; status=${String(result.statusCode)}`,
+          latencyMs: result.latencyMs,
+          details: `tools=${formatToolList(result.toolsCalled)} response="${truncate(result.response, 80)}"`,
+        };
+      },
+    },
+    {
+      name: 'no-stack-trace',
+      description: 'Error responses do not leak stack traces',
+      run: async (runner) => {
+        const result = await runner.invoke('Check flight INVALID_999_NONEXISTENT');
+        const resilienceResult = evaluateResilience({
+          responseBody: result.rawBody,
+          statusCode: result.statusCode,
+          faultType: 'invalid-input',
+        });
+        const passed = !resilienceResult.hasStackTrace;
+        return {
+          passed,
+          reason: passed ? 'No stack trace in response' : 'Stack trace leaked in response',
+          latencyMs: result.latencyMs,
+          details: `status=${String(result.statusCode)} response="${truncate(result.response, 80)}"`,
+        };
+      },
+    },
+    {
+      name: 'rate-limit',
+      description: 'Rate limiter returns 429 with friendly message under burst',
+      run: async (runner) => {
+        const rateLimiterPoints = Number(process.env['RATE_LIMITER_POINTS']) || 30;
+        const burstSize = rateLimiterPoints + 5;
+        const promises = Array.from({ length: burstSize }, (_, i) =>
+          runner.invoke('Hello', `rate-limit-eval-${String(i)}`),
+        );
+        const startTime = Date.now();
+        const results = await Promise.allSettled(promises);
+        const latencyMs = Date.now() - startTime;
+
+        const statuses = results.map((r) =>
+          r.status === 'fulfilled' ? r.value.statusCode : 0,
+        );
+        const got429 = statuses.some((s) => s === 429);
+        const rateLimitedResponses = results.filter((r) =>
+          r.status === 'fulfilled' && r.value.statusCode === 429,
+        );
+
+        let friendlyMessage = true;
+        for (const r of rateLimitedResponses) {
+          if (r.status === 'fulfilled') {
+            const res = evaluateResilience({
+              responseBody: r.value.rawBody,
+              statusCode: r.value.statusCode,
+              faultType: 'rate-limit',
+            });
+            if (!res.hasUserFriendlyMessage) {
+              friendlyMessage = false;
+            }
+          }
+        }
+
+        const passed = got429 && friendlyMessage;
+        const statusSummary = `200s: ${String(statuses.filter((s) => s === 200).length)}, 429s: ${String(statuses.filter((s) => s === 429).length)}`;
+        return {
+          passed,
+          reason: passed
+            ? `Rate limiter triggered correctly (${statusSummary})`
+            : got429
+              ? `429 returned but missing friendly message (${statusSummary})`
+              : `Rate limiter did NOT trigger after ${String(burstSize)} burst requests (${statusSummary})`,
+          latencyMs,
+          details: statusSummary,
+        };
+      },
+    },
+  ];
 }
 
 async function runResilienceEval(
   runner: AgentRunner,
-): Promise<{ criticalFailures: CriticalFailure[] }> {
+): Promise<{ criticalFailures: CriticalFailure[]; scenarioResults: ResilienceScenarioResult[]; totalScenarios: number }> {
   const criticalFailures: CriticalFailure[] = [];
+  const scenarioResults: ResilienceScenarioResult[] = [];
+  const scenarios = createEndToEndScenarios();
 
-  const scenarioInputs = [
-    'What is the weather in London?',
-    'Check flight TEST001',
-    'Weather in Paris and status of TEST002',
-  ];
+  process.stdout.write('\n  RESILIENCE EVAL\n');
 
-  for (const input of scenarioInputs) {
+  for (const scenario of scenarios) {
     try {
-      const agentResult = await runner.invoke(input);
-      const resilienceResult = evaluateResilience({
-        responseBody: agentResult.rawBody,
-        statusCode: agentResult.statusCode,
-        faultType: 'resilience-eval',
-      });
+      const result = await scenario.run(runner);
+      scenarioResults.push(result);
+      const label = result.passed ? 'PASS' : 'FAIL';
+      process.stdout.write(`  [${label}] ${scenario.name}: ${scenario.description}\n`);
+      process.stdout.write(`         ${result.reason} (${String(result.latencyMs)}ms)\n`);
+      process.stdout.write(`         ${result.details}\n`);
 
-      if (resilienceResult.hasStackTrace) {
+      if (!result.passed) {
         criticalFailures.push({
-          testCase: `resilience:${input.slice(0, 40)}`,
-          reason: 'Stack trace leaked',
+          testCase: `resilience:${scenario.name}`,
+          reason: result.reason,
         });
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
+      process.stdout.write(`  [ERR]  ${scenario.name}: ${scenario.description}\n`);
+      process.stdout.write(`         ${message}\n`);
+      scenarioResults.push({ passed: false, reason: message, latencyMs: 0, details: '' });
       criticalFailures.push({
-        testCase: `resilience:${input.slice(0, 40)}`,
+        testCase: `resilience:${scenario.name}`,
         reason: `Execution error: ${message}`,
       });
     }
   }
 
-  return { criticalFailures };
+  process.stdout.write('\n');
+
+  return { criticalFailures, scenarioResults, totalScenarios: scenarios.length };
 }
 
 async function runQualityEval(
@@ -326,14 +508,22 @@ export async function runQuickEval(config: EvalConfig): Promise<EvalSummary> {
 export async function runResilienceOnlyEval(config: EvalConfig): Promise<EvalSummary> {
   const resilienceResult = await runResilienceEval(config.runner);
 
+  const passedCount = resilienceResult.scenarioResults.filter((r) => r.passed).length;
+  const latencies = resilienceResult.scenarioResults
+    .map((r) => r.latencyMs)
+    .filter((l) => l > 0);
+  const accuracyPct = resilienceResult.totalScenarios > 0
+    ? Math.round((passedCount / resilienceResult.totalScenarios) * 1000) / 10
+    : 0;
+
   return {
-    total: 3,
-    passed: 3 - resilienceResult.criticalFailures.length,
-    failed: resilienceResult.criticalFailures.length,
-    toolAccuracyPct: 100,
+    total: resilienceResult.totalScenarios,
+    passed: passedCount,
+    failed: resilienceResult.totalScenarios - passedCount,
+    toolAccuracyPct: accuracyPct,
     avgQualityScore: 0,
-    latencyP50Ms: 0,
-    latencyP95Ms: 0,
+    latencyP50Ms: computePercentiles(latencies, 50),
+    latencyP95Ms: computePercentiles(latencies, 95),
     criticalFailures: resilienceResult.criticalFailures,
   };
 }
@@ -372,8 +562,14 @@ async function pushToLangSmith(summary: EvalSummary): Promise<void> {
   }
 
   const { evaluate } = await import('langsmith/evaluation');
-  const { createMockAgentRunner } = await import('./mock-agent-runner.js');
-  const runner = createMockAgentRunner();
+  const { createRealAgentRunner } = await import('./real-agent-runner.js');
+  const baseUrl = resolveBaseUrl();
+  const oauthSecret = process.env['OAUTH_SECRET'] ?? '';
+  const runner = createRealAgentRunner({
+    baseUrl,
+    oauthClientId: 'default-client',
+    oauthClientSecret: oauthSecret,
+  });
 
   await evaluate(
     async (input: Record<string, unknown>) => {
@@ -400,6 +596,30 @@ async function pushToLangSmith(summary: EvalSummary): Promise<void> {
   process.stdout.write(`\nLangSmith experiment "${experimentName}" pushed to dataset "${datasetName}"\n`);
 }
 
+async function waitForRateLimiter(runner: AgentRunner): Promise<void> {
+  const probe = await runner.invoke('Hello', `rate-limit-probe-${Date.now()}`);
+  if (probe.statusCode !== 429) {
+    return;
+  }
+
+  const retryAfter = typeof probe.rawBody['retryAfterSeconds'] === 'number'
+    ? probe.rawBody['retryAfterSeconds']
+    : 60;
+  const waitSeconds = Math.ceil(retryAfter) + 1;
+
+  process.stdout.write(`  Rate limiter active, waiting ${String(waitSeconds)}s for reset...\n`);
+  await new Promise<void>((resolve) => { setTimeout(resolve, waitSeconds * 1000); });
+}
+
+function resolveBaseUrl(): string {
+  const envUrl = process.env['AGENT_BASE_URL'];
+  if (envUrl && envUrl.length > 0) {
+    return envUrl;
+  }
+  const port = process.env['PORT'] ?? '3000';
+  return `http://localhost:${port}`;
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const isQuick = args.includes('--quick');
@@ -409,8 +629,22 @@ async function main(): Promise<void> {
 
   process.env['FLIGHT_PROVIDER'] = process.env['FLIGHT_PROVIDER'] ?? 'mock';
 
-  const { createMockAgentRunner } = await import('./mock-agent-runner.js');
-  const runner = createMockAgentRunner();
+  const baseUrl = resolveBaseUrl();
+  const oauthSecret = process.env['OAUTH_SECRET'] ?? '';
+  if (oauthSecret.length === 0) {
+    throw new Error('OAUTH_SECRET env var is required for eval. Set it in .env or export it.');
+  }
+
+  const { createRealAgentRunner } = await import('./real-agent-runner.js');
+  const runner = createRealAgentRunner({
+    baseUrl,
+    oauthClientId: 'default-client',
+    oauthClientSecret: oauthSecret,
+  });
+
+  process.stdout.write(`\nEval target: ${baseUrl}\n\n`);
+
+  await waitForRateLimiter(runner);
 
   let summary: EvalSummary;
 

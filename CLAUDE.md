@@ -38,7 +38,7 @@ Full implementation plan: `implementation-plan.md` in project root.
 - Node.js 20+ / TypeScript 5.x (strict: true, no `any`)
 - MCP SDK (`@modelcontextprotocol/sdk`) with Streamable HTTP transport
 - LangGraphJS (`@langchain/langgraph`) for agent orchestration
-- gpt-5-nano via `@langchain/openai` for LLM (model name is configurable via env)
+- gpt-4o-mini via `@langchain/openai` for LLM (model name is configurable via env)
 - Express + helmet + cors for HTTP
 - ioredis for Redis
 - opossum for circuit breaker, custom retry with jitter

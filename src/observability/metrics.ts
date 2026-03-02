@@ -31,7 +31,7 @@ interface ModelCost {
 const DEFAULT_COST: ModelCost = { input: 0.00000015, output: 0.0000006 };
 
 export const MODEL_COSTS = new Map<string, ModelCost>([
-  ['gpt-5-nano', { input: 0.00000005, output: 0.0000004 }],
+  ['gpt-4o-mini', { input: 0.00000015, output: 0.0000006 }],
   ['gpt-4o', { input: 0.0000025, output: 0.00001 }],
   ['default', DEFAULT_COST],
 ]);

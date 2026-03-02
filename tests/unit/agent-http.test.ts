@@ -113,8 +113,51 @@ describe('Agent HTTP App', () => {
       });
 
       expect(response.status).toBe(200);
-      const body = await response.json() as { response: string };
+      const body = await response.json() as { response: string; toolsCalled: string[] };
       expect(body.response).toBe('Echo: Hello');
+      expect(body.toolsCalled).toEqual([]);
+    });
+
+    it('returns toolsCalled when agent uses tools', async () => {
+      const graphWithTools = {
+        invoke: async (input: AgentState): Promise<AgentState> => ({
+          ...input,
+          messages: [...input.messages, new AIMessage('Weather is sunny')],
+          toolResults: [
+            { toolName: 'get_weather', content: '15°C', isError: false },
+          ],
+          error: null,
+        }),
+      };
+
+      const toolApp = await createAgentApp(buildConfig({ agentGraph: graphWithTools }));
+      const toolServer = toolApp.listen(0);
+      const address = toolServer.address();
+      const port = typeof address === 'object' && address !== null ? address.port : 0;
+      const toolBaseUrl = `http://localhost:${String(port)}`;
+
+      try {
+        const response = await fetch(`${toolBaseUrl}/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            message: 'Weather in Paris?',
+            sessionId: 'tool-session',
+          }),
+        });
+
+        expect(response.status).toBe(200);
+        const body = await response.json() as { response: string; toolsCalled: string[] };
+        expect(body.response).toBe('Weather is sunny');
+        expect(body.toolsCalled).toEqual(['get_weather']);
+      } finally {
+        await new Promise<void>((resolve) => {
+          toolServer.close(() => { resolve(); });
+        });
+      }
     });
 
     it('returns 401 without auth header', async () => {

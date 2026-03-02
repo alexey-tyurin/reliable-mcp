@@ -94,9 +94,11 @@ function createChatHandler(
           ? (typeof lastMessage.content === 'string' ? lastMessage.content : '')
           : '';
 
-        logger.info({ userId, sessionId }, 'Chat request completed');
+        const toolsCalled = result.toolResults.map((tr) => tr.toolName);
 
-        res.status(200).json({ response: responseText });
+        logger.info({ userId, sessionId, toolsCalled }, 'Chat request completed');
+
+        res.status(200).json({ response: responseText, toolsCalled });
       })
       .catch((error: unknown) => {
         const errorMessage = error instanceof Error ? error.message : String(error);

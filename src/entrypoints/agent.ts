@@ -14,8 +14,6 @@ import type { BaseMessage } from '@langchain/core/messages';
 import { Client as LangSmithClient } from 'langsmith';
 
 const CORS_ORIGINS = ['http://localhost:3000'];
-const RATE_LIMITER_POINTS = 30;
-const RATE_LIMITER_DURATION = 60;
 const CONNECTION_DRAIN_TIMEOUT = 5000;
 
 function wrapChatModel(chatModel: ChatOpenAI): LlmLike {
@@ -65,7 +63,7 @@ async function main(): Promise<void> {
   }
 
   const chatModel = new ChatOpenAI({
-    modelName: 'gpt-5-nano',
+    modelName: 'gpt-4o-mini',
     openAIApiKey: env.OPENAI_API_KEY,
   });
   const llm = wrapChatModel(chatModel);
@@ -95,8 +93,8 @@ async function main(): Promise<void> {
     oauthSecret: env.OAUTH_SECRET,
     oauthClients,
     corsOrigins: CORS_ORIGINS,
-    rateLimiterPoints: RATE_LIMITER_POINTS,
-    rateLimiterDuration: RATE_LIMITER_DURATION,
+    rateLimiterPoints: env.RATE_LIMITER_POINTS,
+    rateLimiterDuration: env.RATE_LIMITER_DURATION,
   });
 
   const server = app.listen(env.PORT, () => {
