@@ -10,6 +10,15 @@ export type FaultTarget =
   | 'oauth-token'
   | 'llm-api';
 
+const FAULT_TARGETS: ReadonlySet<string> = new Set<FaultTarget>([
+  'weather-api', 'flight-api', 'weather-mcp', 'flight-mcp',
+  'redis', 'redis-cache', 'redis-session', 'oauth-token', 'llm-api',
+]);
+
+export function isFaultTarget(value: string): value is FaultTarget {
+  return FAULT_TARGETS.has(value);
+}
+
 /** Types of faults that can be injected */
 export type FaultConfig =
   | { type: 'latency'; delayMs: number; probability?: number }

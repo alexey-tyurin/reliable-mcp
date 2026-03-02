@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   }
 
   const chatModel = new ChatOpenAI({
-    modelName: 'gpt-4o-mini',
+    modelName: 'gpt-5-nano',
     openAIApiKey: env.OPENAI_API_KEY,
   });
   const llm = wrapChatModel(chatModel);

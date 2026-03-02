@@ -51,7 +51,11 @@
       "Bash(curl -sf -X POST http://localhost:3000/chat -H \"Authorization: Bearer $ACCESS_TOKEN\" -H \"Content-Type: application/json\" -d '{\"\"message\"\":\"\"Is my flight still on time?\"\",\"\"sessionId\"\":\"\"session-mem-v2\"\"}')",
       "Bash(docker compose exec redis redis-cli get \"session:default-client:session-mem-v2\")",
       "Bash(npm run test:unit)",
-      "Bash(python3 -c \"import sys,json; print\\(len\\(json.load\\(sys.stdin\\)\\)\\)\")"
+      "Bash(python3 -c \"import sys,json; print\\(len\\(json.load\\(sys.stdin\\)\\)\\)\")",
+      "Bash(npm run test:chaos)",
+      "WebFetch(domain:developers.openai.com)",
+      "Bash(CHAOS_ENABLED=true npm run test:chaos)",
+      "Bash(test -f .env)"
     ]
   }
 }

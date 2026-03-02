@@ -1,172 +1,220 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
-import type { Server } from 'http';
-import { SignJWT } from 'jose';
-import { AIMessage, HumanMessage } from '@langchain/core/messages';
-import { ChaosController } from '../../src/chaos/controller.js';
-import { createAgentApp } from '../../src/agent/agent-http.js';
-import type { AgentState } from '../../src/agent/state.js';
-import { sendChatRequest, setAgentBaseUrl, setTestToken, assertNoStackTrace } from './helpers.js';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import { createLogger } from '../../src/observability/logger.js';
+import {
+  getSharedHarness,
+  sendChatRequest,
+  assertNoStackTrace,
+  assertComponentCalled,
+  getCallsByComponent,
+} from './helpers.js';
+import type { ChaosTestHarness } from './helpers.js';
 
-const TEST_SECRET = 'test-recovery-secret-at-least-32-chars-long!';
-const secret = new TextEncoder().encode(TEST_SECRET);
+const logger = createLogger('chaos-recovery-test');
 
-function createMockAgentGraph() {
-  return {
-    invoke: async (input: AgentState): Promise<AgentState> => {
-      const lastMessage = input.messages[input.messages.length - 1];
-      const content = lastMessage instanceof HumanMessage
-        ? `Echo: ${typeof lastMessage.content === 'string' ? lastMessage.content : ''}`
-        : 'No message';
-
-      return {
-        ...input,
-        messages: [...input.messages, new AIMessage(content)],
-        toolResults: [],
-        error: null,
-      };
-    },
-  };
-}
-
-describe('Chaos: Recovery Scenarios', () => {
-  let chaos: ChaosController;
-  let server: Server;
+describe('Chaos: Recovery Scenarios (full stack)', () => {
+  let harness: ChaosTestHarness;
 
   beforeAll(async () => {
-    process.env['CHAOS_ENABLED'] = 'true';
-    process.env['NODE_ENV'] = 'test';
-
-    ChaosController.reset();
-    chaos = ChaosController.getInstance();
-
-    const token = await new SignJWT({ sub: 'chaos-user' })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime('1h')
-      .sign(secret);
-
-    setTestToken(token);
-
-    const app = await createAgentApp({
-      agentGraph: createMockAgentGraph(),
-      oauthSecret: TEST_SECRET,
-      oauthClients: new Map([['test-client', 'test-secret']]),
-      corsOrigins: ['http://localhost:3000'],
-      rateLimiterPoints: 100,
-      rateLimiterDuration: 60,
-    });
-
-    server = app.listen(0);
-    const address = server.address();
-    const port = typeof address === 'object' && address !== null ? address.port : 0;
-    setAgentBaseUrl(`http://localhost:${String(port)}`);
+    harness = await getSharedHarness();
   });
 
   afterEach(() => {
-    chaos.clearAll();
-  });
-
-  afterAll(async () => {
-    ChaosController.reset();
-    await new Promise<void>((resolve) => {
-      server.close(() => { resolve(); });
-    });
+    harness.chaos.clearAll();
+    harness.callLogs.length = 0;
   });
 
   describe('weather API recovery', () => {
     it('time-bounded fault expires automatically', () => {
       vi.useFakeTimers();
 
-      chaos.inject('weather-api', { type: 'error', statusCode: 503 }, 5000);
+      harness.chaos.inject('weather-api', { type: 'error', statusCode: 503 }, 5000);
 
-      expect(chaos.getFault('weather-api')).not.toBeNull();
+      expect(harness.chaos.getFault('weather-api')).not.toBeNull();
 
       vi.advanceTimersByTime(5100);
 
-      expect(chaos.getFault('weather-api')).toBeNull();
+      expect(harness.chaos.getFault('weather-api')).toBeNull();
+      logger.info('[CHAOS-TEST] Time-bounded fault expired as expected');
 
       vi.useRealTimers();
     });
 
-    it('service resumes after fault is manually cleared', async () => {
-      const faultId = chaos.inject('weather-api', { type: 'error', statusCode: 503 });
+    it('service resumes after fault is manually cleared — full LLM call succeeds', async () => {
+      const faultId = harness.chaos.inject('weather-api', { type: 'error', statusCode: 503 });
 
-      expect(chaos.getFault('weather-api')).not.toBeNull();
+      const duringFault = await sendChatRequest(
+        harness.agentBaseUrl,
+        harness.testToken,
+        'What is the weather in London?',
+        'recovery-weather-503-during-fault',
+      );
+      expect(duringFault.status).toBe(200);
+      assertNoStackTrace(duringFault);
 
-      chaos.clear(faultId);
+      const llmCallsDuring = getCallsByComponent(harness.callLogs, 'llm');
+      logger.info(
+        { llmCallsDuring: llmCallsDuring.length },
+        '[CHAOS-TEST] LLM calls during weather fault',
+      );
 
-      expect(chaos.getFault('weather-api')).toBeNull();
+      harness.callLogs.length = 0;
+      harness.chaos.clear(faultId);
 
-      const result = await sendChatRequest('Hello after recovery');
-      expect(result.status).toBe(200);
-      assertNoStackTrace(result);
+      expect(harness.chaos.getFault('weather-api')).toBeNull();
+
+      const afterRecovery = await sendChatRequest(
+        harness.agentBaseUrl,
+        harness.testToken,
+        'What is the weather in London?',
+        'recovery-weather-503-after-clear',
+      );
+      expect(afterRecovery.status).toBe(200);
+      assertNoStackTrace(afterRecovery);
+      assertComponentCalled(harness.callLogs, 'llm');
+
+      const weatherCalls = getCallsByComponent(harness.callLogs, 'weather-api');
+      logger.info(
+        { weatherFetchCount: weatherCalls.length, toolWasCalled: weatherCalls.length > 0 },
+        '[CHAOS-TEST] Weather recovery verified — fault cleared, LLM responded successfully',
+      );
     });
   });
 
   describe('Redis recovery', () => {
-    it('Redis fault clears and operations resume', async () => {
-      const faultId = chaos.inject('redis', { type: 'connection-refused' });
+    it('system works during fault, then resumes after clearing — full stack verified', async () => {
+      const faultId = harness.chaos.inject('redis', { type: 'connection-refused' });
 
-      const duringFault = await sendChatRequest('During Redis down');
+      const duringFault = await sendChatRequest(
+        harness.agentBaseUrl,
+        harness.testToken,
+        'What is the status of flight TEST001?',
+        'recovery-redis-down-during-fault',
+      );
       expect(duringFault.status).toBe(200);
+      assertComponentCalled(harness.callLogs, 'llm');
 
-      chaos.clear(faultId);
-      expect(chaos.getFault('redis')).toBeNull();
+      logger.info(
+        { llmCalls: getCallsByComponent(harness.callLogs, 'llm').length },
+        '[CHAOS-TEST] LLM calls during Redis fault — agent running in degraded mode',
+      );
 
-      const afterRecovery = await sendChatRequest('After Redis recovery');
+      harness.callLogs.length = 0;
+      harness.chaos.clear(faultId);
+      expect(harness.chaos.getFault('redis')).toBeNull();
+
+      const afterRecovery = await sendChatRequest(
+        harness.agentBaseUrl,
+        harness.testToken,
+        'What is the status of flight TEST001?',
+        'recovery-redis-down-after-clear',
+      );
       expect(afterRecovery.status).toBe(200);
       assertNoStackTrace(afterRecovery);
+      assertComponentCalled(harness.callLogs, 'llm');
+
+      logger.info('[CHAOS-TEST] Redis recovery confirmed — full stack operational');
     });
   });
 
   describe('compound failure recovery', () => {
-    it('full service restored when all faults are cleared', async () => {
-      const redisFault = chaos.inject('redis', { type: 'connection-refused' });
-      const weatherFault = chaos.inject('weather-api', { type: 'error', statusCode: 503 });
+    it('full service restored when all faults are cleared — LLM + MCP + weather API all working', async () => {
+      const redisFault = harness.chaos.inject('redis', { type: 'connection-refused' });
+      const weatherFault = harness.chaos.inject('weather-api', { type: 'error', statusCode: 503 });
 
-      expect(chaos.getActiveFaults()).toHaveLength(2);
+      expect(harness.chaos.getActiveFaults()).toHaveLength(2);
 
-      const duringFailure = await sendChatRequest('During compound failure');
+      const duringFailure = await sendChatRequest(
+        harness.agentBaseUrl,
+        harness.testToken,
+        'What is the weather in Paris?',
+        'recovery-compound-redis-weather-during',
+      );
       expect(duringFailure.status).toBe(200);
+      assertComponentCalled(harness.callLogs, 'llm');
 
-      chaos.clear(redisFault);
-      chaos.clear(weatherFault);
+      logger.info(
+        {
+          faultCount: harness.chaos.getActiveFaults().length,
+          llmCalls: getCallsByComponent(harness.callLogs, 'llm').length,
+        },
+        '[CHAOS-TEST] During compound failure — system degraded but responsive',
+      );
 
-      expect(chaos.getActiveFaults()).toHaveLength(0);
+      harness.callLogs.length = 0;
+      harness.chaos.clear(redisFault);
+      harness.chaos.clear(weatherFault);
 
-      const afterRecovery = await sendChatRequest('After compound recovery');
+      expect(harness.chaos.getActiveFaults()).toHaveLength(0);
+
+      const afterRecovery = await sendChatRequest(
+        harness.agentBaseUrl,
+        harness.testToken,
+        'What is the weather in Paris?',
+        'recovery-compound-redis-weather-after',
+      );
       expect(afterRecovery.status).toBe(200);
       assertNoStackTrace(afterRecovery);
+      assertComponentCalled(harness.callLogs, 'llm');
+
+      logger.info(
+        {
+          componentsSeen: [...new Set(harness.callLogs.map((l) => l.component))],
+        },
+        '[CHAOS-TEST] Compound recovery — all components active again',
+      );
     });
 
-    it('partial recovery restores cleared subsystems', () => {
-      const redisFault = chaos.inject('redis', { type: 'connection-refused' });
-      chaos.inject('weather-api', { type: 'error', statusCode: 503 });
+    it('partial recovery restores cleared subsystem while other remains faulted', async () => {
+      const redisFault = harness.chaos.inject('redis', { type: 'connection-refused' });
+      harness.chaos.inject('weather-api', { type: 'error', statusCode: 503 });
 
-      chaos.clear(redisFault);
+      harness.chaos.clear(redisFault);
 
-      expect(chaos.getFault('redis')).toBeNull();
-      expect(chaos.getFault('weather-api')).not.toBeNull();
-      expect(chaos.getActiveFaults()).toHaveLength(1);
+      expect(harness.chaos.getFault('redis')).toBeNull();
+      expect(harness.chaos.getFault('weather-api')).not.toBeNull();
+      expect(harness.chaos.getActiveFaults()).toHaveLength(1);
+
+      logger.info('[CHAOS-TEST] Partial recovery — redis cleared, weather still faulted');
     });
   });
 
   describe('auth recovery', () => {
-    it('auth resumes after token fault is cleared', async () => {
-      const faultId = chaos.inject('oauth-token', {
+    it('auth resumes after token fault is cleared — full LLM pipeline processes again', async () => {
+      const faultId = harness.chaos.inject('oauth-token', {
         type: 'error',
         statusCode: 401,
-        message: 'Token expired',
+        message: 'Token expired (chaos)',
       });
 
-      const duringFault = await sendChatRequest('During auth failure');
+      const duringFault = await sendChatRequest(
+        harness.agentBaseUrl,
+        harness.testToken,
+        'What is the weather?',
+        'recovery-auth-401-during-fault',
+      );
       expect(duringFault.status).toBe(401);
 
-      chaos.clear(faultId);
+      const llmCallsDuring = getCallsByComponent(harness.callLogs, 'llm');
+      expect(llmCallsDuring).toHaveLength(0);
+      logger.info('[CHAOS-TEST] Auth fault active — no LLM calls (correct)');
 
-      const afterRecovery = await sendChatRequest('After auth recovery');
+      harness.callLogs.length = 0;
+      harness.chaos.clear(faultId);
+
+      const afterRecovery = await sendChatRequest(
+        harness.agentBaseUrl,
+        harness.testToken,
+        'What is the status of flight TEST001?',
+        'recovery-auth-401-after-clear',
+      );
       expect(afterRecovery.status).toBe(200);
       expect(afterRecovery.body['response']).toBeDefined();
+      assertComponentCalled(harness.callLogs, 'llm');
+
+      logger.info(
+        { llmCalls: getCallsByComponent(harness.callLogs, 'llm').length },
+        '[CHAOS-TEST] Auth recovery — LLM pipeline active again',
+      );
     });
   });
 });

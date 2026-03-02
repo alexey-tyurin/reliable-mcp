@@ -35,6 +35,7 @@ interface McpCallResult {
 }
 
 interface ServerConnection {
+  name: string;
   url: string;
   client: McpClientLike;
   connected: boolean;
@@ -96,6 +97,7 @@ export function createMcpClientManager(
         : createDefaultClient(entry.url);
 
       servers.push({
+        name: entry.name,
         url: entry.url,
         client,
         connected: false,
@@ -208,6 +210,30 @@ export function createMcpClientManager(
     }
   }
 
+  async function checkMcpChaos(serverName: string): Promise<void> {
+    if (process.env['CHAOS_ENABLED'] !== 'true') return;
+
+    const { ChaosController } = await import('../chaos/controller.js');
+    const { isFaultTarget } = await import('../chaos/fault-types.js');
+    const controller = ChaosController.getInstance();
+
+    if (!isFaultTarget(serverName)) return;
+    const fault = controller.getFault(serverName);
+
+    if (!fault) return;
+
+    if (fault.type === 'connection-refused') {
+      throw new TypeError(`MCP server ${serverName} connection refused (chaos)`);
+    }
+    if (fault.type === 'error') {
+      throw new Error(`MCP server ${serverName} error ${String(fault.statusCode)} (chaos)`);
+    }
+    if (fault.type === 'timeout') {
+      await new Promise((resolve) => setTimeout(resolve, fault.hangMs));
+      throw new Error(`MCP server ${serverName} timed out (chaos)`);
+    }
+  }
+
   async function callTool(toolCall: McpToolCall): Promise<McpToolResult> {
     const server = findServerForTool(toolCall.name);
 
@@ -220,6 +246,8 @@ export function createMcpClientManager(
     }
 
     try {
+      await checkMcpChaos(server.name);
+
       const result = await server.client.callTool({
         name: toolCall.name,
         arguments: toolCall.arguments,

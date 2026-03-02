@@ -155,7 +155,7 @@ Copy `.env.example` to `.env` and fill in your keys:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENAI_API_KEY` | *required* | OpenAI API key (for gpt-4o-mini) |
+| `OPENAI_API_KEY` | *required* | OpenAI API key (for gpt-5-nano) |
 | `LANGSMITH_API_KEY` | *required* | LangSmith API key for observability |
 | `OAUTH_SECRET` | *required* | JWT signing secret (min 32 chars) |
 | `WEATHER_MCP_URL` | `http://localhost:3001/mcp` | Weather MCP server URL |
@@ -467,7 +467,7 @@ npm run predeploy  # typecheck + lint + all tests + full eval
 | Category | Technology |
 |----------|-----------|
 | Runtime | Node.js 20, TypeScript 5.x (strict mode) |
-| Agent | LangGraphJS, gpt-4o-mini via @langchain/openai |
+| Agent | LangGraphJS, gpt-5-nano via @langchain/openai |
 | MCP | @modelcontextprotocol/sdk (Streamable HTTP transport) |
 | HTTP | Express, helmet, cors |
 | Auth | OAuth 2.1 (client_credentials), jose (JWT) |
