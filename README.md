@@ -2,7 +2,7 @@
 
 **How to build agentic solutions with MCP that survive in production.**
 
-> Companion repository for the Medium article: [MCP Reliability Playbook](https://medium.com/@alexey-tyurin) — a deep dive into failure modes, resilience patterns, and production-hardening techniques for MCP-based agents.
+> Companion repository for the Medium article: [MCP Reliability Playbook](https://medium.com/@altyurin3/mcp-reliability-playbook-d6c368f7c515) — a deep dive into failure modes, resilience patterns, and production-hardening techniques for MCP-based agents.
 
 ---
 
