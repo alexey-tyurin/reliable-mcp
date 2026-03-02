@@ -1,22 +1,80 @@
-# MCP Weather & Flight Chatbot
+# MCP Reliability Playbook
 
-A production-ready chatbot that answers weather and flight status questions using **MCP servers**, **LangGraphJS agent orchestration**, and comprehensive reliability patterns. Supports combined queries ("weather in NYC and flight UA123 status?") in a single request.
+**How to build agentic solutions with MCP that survive in production.**
 
-## Table of Contents
+> Companion repository for the Medium article: [MCP Reliability Playbook](https://medium.com/@alexey-tyurin) — a deep dive into failure modes, resilience patterns, and production-hardening techniques for MCP-based agents.
 
-- [Architecture](#architecture)
-- [Key Features](#key-features)
-- [Quick Start](#quick-start)
-- [Environment Variables](#environment-variables)
-- [API Usage](#api-usage)
-- [Docker Commands Reference](#docker-commands-reference)
-- [Testing](#testing)
-- [Evaluation Guide](#evaluation-guide)
-- [Monitoring & Observability](#monitoring--observability)
-- [Deployment Guide](#deployment-guide)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [License](#license)
+---
+
+## The Problem
+
+MCP (Model Context Protocol) makes it easy to connect LLMs to external tools. But *easy to connect* is not *safe to run in production*. Real systems face:
+
+- **Network failures** — MCP servers restart, connections go stale, DNS flakes out
+- **Cascading outages** — one slow upstream saturates your thread pool, taking down everything
+- **Silent data corruption** — malformed responses slip past untyped boundaries
+- **Unbounded latency** — LLM calls, tool calls, and cache lookups all competing for the same request budget
+- **Partial failures** — one of two tool calls fails; do you drop the entire response or return what you have?
+
+This project answers all of these with working, tested code — not blog-post pseudocode.
+
+## What This Project Demonstrates
+
+A production-grade chatbot that answers weather and flight status questions (including combined queries in a single request) using two MCP servers, LangGraphJS agent orchestration, and **9 distinct reliability patterns**, each covered by automated tests.
+
+| Pattern | What It Solves | Where to Look |
+|---------|---------------|---------------|
+| **Circuit breaker** | Stops calling a failing service, gives it time to recover | `src/resilience/circuit-breaker.ts` |
+| **Retry with exponential backoff + jitter** | Recovers from transient failures without thundering herd | `src/resilience/retry.ts` |
+| **Timeout budgets** | Bounds latency per operation; prevents thread starvation | `src/resilience/timeout.ts` |
+| **Graceful degradation** | Returns partial results when one MCP server is down | `src/mcp/client.ts`, `src/agent/nodes.ts` |
+| **Semantic caching** | Reduces LLM + tool calls for similar questions; TTL varies by data volatility | `src/cache/semantic-cache.ts` |
+| **Chaos / fault injection** | Proves resilience patterns actually work under failure | `src/chaos/`, `tests/chaos/` |
+| **Graceful shutdown** | LIFO cleanup within Docker's 10s stop timeout; no resource leaks | `src/utils/graceful-shutdown.ts` |
+| **Stale session reconnection** | Auto-recovers when MCP server restarts mid-session | `src/mcp/client.ts` |
+| **Pre-deploy evaluation gate** | Blocks deployment if tool accuracy drops below 90% or any critical failure exists | `tests/eval/` |
+
+### Resilience Stack Composition
+
+Every external call (MCP tools, LLM, cache) is wrapped in a precise order:
+
+```
+circuit breaker → retry with jitter → timeout → actual call
+```
+
+The order matters: the circuit breaker sees all failure modes (timeouts, retries exhausted, upstream errors). The retry fires before the circuit trips. The timeout bounds each individual attempt, not the total.
+
+### Chaos Testing — Proving It Works
+
+The project includes a fault injection framework with **8 fault types** across **9 injection targets** — exercised by 21 automated chaos tests:
+
+| Fault Type | What It Simulates |
+|---|---|
+| `latency` | Slow upstream (configurable delay) |
+| `error` | HTTP 500 / 502 / 503 from upstream |
+| `timeout` | Upstream hangs indefinitely |
+| `connection-refused` | Service unreachable |
+| `connection-drop` | Connection starts then dies mid-response |
+| `rate-limit` | Upstream returns 429 with Retry-After |
+| `malformed` | Corrupted JSON response body |
+| `schema-mismatch` | Valid JSON with missing fields |
+
+Faults inject at the transport level (fetch, Redis commands) so circuit breakers, retries, and timeouts exercise naturally — no mocking around them.
+
+**Production safety**: chaos code is triple-guarded — `CHAOS_ENABLED` env check + `NODE_ENV !== 'production'` check + excluded from production build via `tsconfig.prod.json`.
+
+### Evaluation Suite — Quality Gate Before Deploy
+
+63 evaluation cases across 3 datasets, scored by 4 automated evaluators:
+
+| Evaluator | What It Catches |
+|---|---|
+| **Tool selection** | Wrong tool called, missing tool, extra tool calls |
+| **Latency budget** | Response exceeds time budget (tiered: cache hit < single tool < combined) |
+| **Resilience** | Stack traces in user responses, unfriendly error messages, missing partial results |
+| **Response quality** | LLM-judged accuracy, completeness, and tone |
+
+The predeploy gate (`npm run predeploy`) runs typecheck + lint + 317 tests + 63 evals. Any failure blocks the merge.
 
 ## Architecture
 
@@ -78,17 +136,18 @@ graph TB
 | **flight-mcp** | 3002 | MCP server (Streamable HTTP) — `get_flight_status` tool (mock or FlightAware) |
 | **Redis** | 6379 | Semantic cache, session memory, rate limiting |
 
-## Key Features
+## Test Coverage
 
-- **Combined queries**: Ask about weather and flights in a single message
-- **Session memory**: Conversation context persists across requests via Redis
-- **Graceful degradation**: If one MCP server goes down, the other still works. If Redis is down, the agent continues in stateless mode
-- **Auto-reconnection**: MCP client automatically reconnects when servers restart
-- **Resilience stack**: Circuit breaker → retry with jitter → timeout on all external calls
-- **Semantic caching**: Similar questions hit cache using cosine similarity on embeddings
-- **Chaos testing**: Fault injection framework for testing failure scenarios (dev/test only)
-- **Evaluation suite**: Pre-deployment quality gate with tool-calling accuracy, latency budgets, resilience checks, and LangSmith integration
-- **Observability**: Structured logging (pino), LangSmith tracing, metrics tracking
+**317 test cases** across 38 test files + **63 evaluation cases** across 3 datasets:
+
+| Category | Files | Cases | What It Validates |
+|----------|------:|------:|----|
+| Unit | 34 | 285 | Agent logic, MCP servers, resilience wrappers, cache, auth, chaos framework, eval scoring |
+| Integration | 2 | 11 | End-to-end MCP weather & flight servers with real Redis |
+| Chaos | 2 | 21 | Circuit breaker trip/recovery, timeout exhaustion, Redis degraded mode, dual-server failure, malformed responses |
+| Evaluation | 3 datasets | 63 | Tool accuracy, latency budgets, resilience contracts, response quality (including prompt injection, XSS, SQL injection edge cases) |
+
+All tests written test-first (TDD). Non-deterministic outputs use bounded assertions, not exact string matches.
 
 ## Quick Start
 
@@ -160,9 +219,6 @@ Copy `.env.example` to `.env` and fill in your keys:
 | `OAUTH_SECRET` | *required* | JWT signing secret (min 32 chars) |
 | `WEATHER_MCP_URL` | `http://localhost:3001/mcp` | Weather MCP server URL |
 | `FLIGHT_MCP_URL` | `http://localhost:3002/mcp` | Flight MCP server URL |
-| `LANGCHAIN_TRACING_V2` | | Set to `true` to enable auto-tracing |
-| `LANGCHAIN_API_KEY` | | Same as `LANGSMITH_API_KEY` |
-| `LANGCHAIN_PROJECT` | | LangSmith project name |
 
 ### Weather MCP Service
 
@@ -197,15 +253,6 @@ curl -X POST http://localhost:3000/oauth/token \
   }'
 ```
 
-Response:
-```json
-{
-  "access_token": "eyJhbGc...",
-  "token_type": "Bearer",
-  "expires_in": 3600
-}
-```
-
 ### 2. Send a Chat Message
 
 ```bash
@@ -221,18 +268,11 @@ curl -X POST http://localhost:3000/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "What is the status of flight UA123?", "sessionId": "my-session"}'
 
-# Combined query
+# Combined query — exercises parallel tool calling and result aggregation
 curl -X POST http://localhost:3000/chat \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{"message": "Weather in NYC and status of flight UA123?", "sessionId": "my-session"}'
-```
-
-Response:
-```json
-{
-  "response": "The weather in London is currently 12°C with partly cloudy conditions..."
-}
 ```
 
 ### 3. Health Check
@@ -242,135 +282,30 @@ curl http://localhost:3000/health
 # {"status":"ok","service":"agent","uptime":42.5}
 ```
 
-## Docker Commands Reference
+## Running Tests
 
 ```bash
-# Full lifecycle
-docker compose build              # Build all images
-docker compose up -d              # Start all services
-docker compose ps                 # Check status & health
-docker compose logs -f agent      # Follow agent logs
-docker compose logs -f --tail=50  # Follow all logs
+# TDD workflow
+npm run test:watch
 
-# Individual service management
-docker compose stop weather-mcp   # Stop weather service
-docker compose start weather-mcp  # Restart weather service
-docker compose restart agent      # Restart agent
+# By category
+npm run test:unit                          # Fast, no Docker needed
+npm run test:integration                   # Requires Redis
+CHAOS_ENABLED=true npm run test:chaos      # Fault injection scenarios
 
-# Dev mode with hot reload
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-
-# Teardown
-docker compose down               # Stop all services
-docker compose down -v            # Stop and remove volumes
-```
-
-## Testing
-
-**317 test cases** across 38 test files + **63 evaluation cases** across 3 datasets:
-
-| Category | Files | Test Cases | Description |
-|----------|------:|----------:|----|
-| Unit | 34 | 285 | Fast, no Docker needed — agent, MCP, resilience, cache, auth, chaos, eval |
-| Integration | 2 | 11 | Requires Redis — MCP weather & flight servers end-to-end |
-| Chaos | 2 | 21 | Fault injection — failure scenarios & recovery |
-| Evaluation | 3 datasets | 63 | Tool-calling (32), edge-cases (16), e2e-flows (15) |
-
-### TDD Workflow
-
-```bash
-npm run test:watch           # Watch mode for TDD (red-green-refactor)
-```
-
-### Unit Tests
-
-```bash
-npm run test:unit            # Fast tests, no Docker needed
-```
-
-### Integration Tests
-
-```bash
-# Requires Redis running
-docker compose up -d redis
-npm run test:integration
-```
-
-### Chaos Tests
-
-```bash
-# Fault injection testing
-CHAOS_ENABLED=true npm run test:chaos
-```
-
-### All Tests
-
-```bash
-npm run test                 # Run all test suites
-```
-
-### Quality Checks
-
-```bash
-npx tsc --noEmit             # Type check (zero errors required)
-npm run lint                 # Lint check (zero warnings required)
-```
-
-## Evaluation Guide
-
-The evaluation suite validates tool-calling accuracy, latency budgets, resilience, and response quality before deployment.
-
-### Running Evaluations
-
-```bash
-npm run eval:quick           # Tool-calling only (~1 min)
-npm run eval:resilience      # Resilience checks only
+# Evaluations
+npm run eval:quick           # Tool-calling accuracy (~1 min)
+npm run eval:resilience      # Resilience contract checks
 npm run eval                 # Full suite (~5 min)
+npm run eval -- --langsmith  # Push results to LangSmith
+
+# Pre-deploy gate (must pass before merge)
+npm run predeploy            # typecheck + lint + all tests + full eval
+
+# Quality checks
+npx tsc --noEmit             # Type check (zero errors)
+npm run lint                 # Lint check (zero warnings)
 ```
-
-### Pass Criteria
-
-- **Tool accuracy** >= 90% (correct tool selection for each query type)
-- **Zero critical failures** (no stack traces, no forbidden content leaks)
-
-### Datasets
-
-| Dataset | Cases | Description |
-|---------|-------|-------------|
-| `tool-calling.json` | 32 | Weather, flight, combined, ambiguous, no-tool queries |
-| `edge-cases.json` | 16 | Prompt injection, SQL injection, XSS, gibberish, special chars |
-| `e2e-flows.json` | 15 | Multi-turn conversation flows (follow-ups, session memory, cache hits, mixed queries) |
-
-### Evaluators
-
-| Evaluator | What It Checks |
-|-----------|---------------|
-| **tool-selection** | Correct tools called (1.0 exact, 0.5 partial, 0.0 wrong) |
-| **latency-budget** | Response time within budget (200ms none, 1s single, 1.5s combined) |
-| **resilience** | No stack traces, proper HTTP status codes, safe error messages |
-| **response-quality** | LLM-judged helpfulness, relevance, correctness (1-3 scale) |
-
-### Adding Test Cases
-
-Add entries to `tests/eval/datasets/tool-calling.json`:
-
-```json
-{
-  "input": "What's the weather like in Berlin?",
-  "expected_tools": ["get_weather"],
-  "category": "weather-only"
-}
-```
-
-### LangSmith Integration
-
-Push evaluation results to LangSmith as an experiment:
-
-```bash
-npm run eval -- --langsmith
-```
-
-This creates a dataset and experiment in your LangSmith project, allowing you to track evaluation results over time and compare across runs.
 
 ## Monitoring & Observability
 
@@ -383,99 +318,29 @@ All agent invocations are traced to LangSmith when `LANGCHAIN_TRACING_V2=true`:
 - Tags: `user:<id>`, `session:<id>`, `tool:<name>`, `cache:hit/miss`
 - Metadata: latency, tools called, cache hit status, error codes
 
-View traces at [smith.langchain.com](https://smith.langchain.com).
-
 ### Structured Logging
 
-All services use pino for JSON structured logging:
-
-```bash
-# Follow agent logs
-docker compose logs -f agent
-
-# Example log entry
-# {"level":"info","time":1772388600,"service":"agent-http","userId":"client","sessionId":"s1","msg":"Processing chat request"}
-```
+All services use pino for JSON structured logging. No `console.log`. Secrets and tokens are never logged — only metadata (user IDs, session IDs, error codes).
 
 ### Metrics
 
-The agent tracks:
-- Cache hit/miss rates
-- Error counts by type
-- Circuit breaker state transitions
-- Request latency
-
-### Health Checks
-
-Every service exposes `GET /health`:
-
-```json
-{"status": "ok", "service": "agent", "uptime": 42.5}
-```
-
-Docker Compose uses these for container orchestration — the agent waits for MCP servers and Redis to be healthy before starting.
-
-## Deployment Guide
-
-### Container-Level Deployment
-
-Each service can be deployed independently. They communicate over HTTP:
-
-```bash
-# Build production image
-docker build -t reliable-mcp .
-
-# Run individual services
-docker run -e SERVICE_ROLE=weather-mcp -e PORT=3001 -e WEATHERAPI_KEY=... \
-  -p 3001:3001 reliable-mcp node dist/entrypoints/weather-mcp.js
-
-docker run -e SERVICE_ROLE=flight-mcp -e PORT=3002 -e FLIGHT_PROVIDER=mock \
-  -p 3002:3002 reliable-mcp node dist/entrypoints/flight-mcp.js
-
-docker run -e SERVICE_ROLE=agent -e PORT=3000 \
-  -e OPENAI_API_KEY=... -e LANGSMITH_API_KEY=... -e OAUTH_SECRET=... \
-  -e WEATHER_MCP_URL=http://weather-host:3001/mcp \
-  -e FLIGHT_MCP_URL=http://flight-host:3002/mcp \
-  -e REDIS_URL=redis://redis-host:6379 \
-  -p 3000:3000 reliable-mcp node dist/entrypoints/agent.js
-```
-
-### Scaling
-
-- **MCP servers** are stateless — scale horizontally behind a load balancer
-- **Agent** maintains session state in Redis — scales horizontally with shared Redis
-- **Redis** can be replaced with Redis Cluster for high availability
-
-### Pre-Deploy Checklist
-
-```bash
-# Run the full quality gate (must pass before merge)
-npm run predeploy  # typecheck + lint + all tests + full eval
-```
-
-### Production Considerations
-
-- Set `NODE_ENV=production`
-- Use a real Redis instance (not redis-stack)
-- Configure CORS origins appropriately (not `*`)
-- Rotate `OAUTH_SECRET` periodically
-- Set `FLIGHT_PROVIDER=flightaware` with a valid API key for real flight data
-- **Never** set `CHAOS_ENABLED=true` in production
+The agent tracks: cache hit/miss rates, error counts by type, circuit breaker state transitions, request latency.
 
 ## Tech Stack
 
 | Category | Technology |
 |----------|-----------|
-| Runtime | Node.js 20, TypeScript 5.x (strict mode) |
+| Runtime | Node.js 20, TypeScript 5.x (strict mode, zero `any`) |
 | Agent | LangGraphJS, gpt-4o-mini via @langchain/openai |
 | MCP | @modelcontextprotocol/sdk (Streamable HTTP transport) |
-| HTTP | Express, helmet, cors |
+| HTTP | Express, helmet (strict CSP), cors |
 | Auth | OAuth 2.1 (client_credentials), jose (JWT) |
-| Cache | Redis (ioredis), cosine similarity embeddings |
-| Resilience | opossum (circuit breaker), custom retry with jitter |
-| Observability | LangSmith, pino (structured logging) |
-| Testing | vitest, fault injection (chaos framework) |
-| Validation | zod |
+| Cache | Redis (ioredis), cosine similarity on OpenAI embeddings |
+| Resilience | opossum (circuit breaker), custom retry with jitter, timeout budgets |
+| Chaos | Custom fault injection framework (8 fault types, 9 targets) |
+| Observability | LangSmith tracing, pino structured logging |
+| Testing | vitest (317 tests), evaluation suite (63 cases, 4 evaluators) |
+| Validation | zod (env, API input, MCP schemas, responses) |
 
 ## Project Structure
 
@@ -496,8 +361,8 @@ tests/
   integration/     Needs Redis + MCP servers
   chaos/           Failure injection scenarios
   eval/            Pre-deployment evaluation suite
-    datasets/      Test case JSON files
-    evaluators/    Scoring functions
+    datasets/      Test case JSON files (tool-calling, edge-cases, e2e-flows)
+    evaluators/    Scoring functions (tool-selection, latency, resilience, quality)
 fixtures/
   flights/         Mock flight API responses
 ```
