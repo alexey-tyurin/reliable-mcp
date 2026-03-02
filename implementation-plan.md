@@ -84,7 +84,7 @@ Every module must be reviewed for these categories of bugs before moving to the 
 ## 1. Project Structure
 
 ```
-mcp-chatbot/
+reliable-mcp/
 ├── CLAUDE.md                           # Project context for Claude Code (loaded every session)
 ├── .claude/
 │   └── skills/

@@ -534,7 +534,7 @@ async function pushToLangSmith(summary: EvalSummary): Promise<void> {
   const { Client } = await import('langsmith');
   const client = new Client();
 
-  const datasetName = 'mcp-chatbot-eval';
+  const datasetName = 'reliable-mcp-eval';
   const experimentName = `eval-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}`;
 
   let dataset;

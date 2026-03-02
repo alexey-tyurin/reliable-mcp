@@ -423,21 +423,21 @@ Each service can be deployed independently. They communicate over HTTP:
 
 ```bash
 # Build production image
-docker build -t mcp-chatbot .
+docker build -t reliable-mcp .
 
 # Run individual services
 docker run -e SERVICE_ROLE=weather-mcp -e PORT=3001 -e WEATHERAPI_KEY=... \
-  -p 3001:3001 mcp-chatbot node dist/entrypoints/weather-mcp.js
+  -p 3001:3001 reliable-mcp node dist/entrypoints/weather-mcp.js
 
 docker run -e SERVICE_ROLE=flight-mcp -e PORT=3002 -e FLIGHT_PROVIDER=mock \
-  -p 3002:3002 mcp-chatbot node dist/entrypoints/flight-mcp.js
+  -p 3002:3002 reliable-mcp node dist/entrypoints/flight-mcp.js
 
 docker run -e SERVICE_ROLE=agent -e PORT=3000 \
   -e OPENAI_API_KEY=... -e LANGSMITH_API_KEY=... -e OAUTH_SECRET=... \
   -e WEATHER_MCP_URL=http://weather-host:3001/mcp \
   -e FLIGHT_MCP_URL=http://flight-host:3002/mcp \
   -e REDIS_URL=redis://redis-host:6379 \
-  -p 3000:3000 mcp-chatbot node dist/entrypoints/agent.js
+  -p 3000:3000 reliable-mcp node dist/entrypoints/agent.js
 ```
 
 ### Scaling

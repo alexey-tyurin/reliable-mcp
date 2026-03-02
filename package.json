@@ -1,5 +1,5 @@
 {
-  "name": "mcp-chatbot",
+  "name": "reliable-mcp",
   "version": "1.0.0",
   "description": "Production-ready chatbot using MCP servers, LangGraphJS agent orchestration, and comprehensive reliability patterns",
   "type": "module",
