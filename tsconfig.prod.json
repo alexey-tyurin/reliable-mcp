@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "dist", "src/chaos/**", "tests/**"]
+  "exclude": ["node_modules", "dist", "src/chaos-config.ts", "src/chaos-scenarios.ts", "tests/**"]
 }

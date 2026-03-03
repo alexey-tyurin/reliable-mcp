@@ -5,7 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 COPY tsconfig.json tsconfig.prod.json ./
 COPY src/ ./src/
-RUN npm run build:prod && rm -rf dist/chaos
+RUN npm run build:prod
 
 # Runtime stage
 FROM node:20-alpine
