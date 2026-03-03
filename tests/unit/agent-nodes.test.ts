@@ -50,6 +50,7 @@ function createMockMcpManager(): McpClientManager {
         },
       },
     ]),
+    resetCircuitBreakers: vi.fn(),
   };
 }
 

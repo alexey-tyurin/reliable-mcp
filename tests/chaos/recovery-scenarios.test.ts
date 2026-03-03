@@ -20,6 +20,7 @@ describe('Chaos: Recovery Scenarios (full stack)', () => {
 
   afterEach(() => {
     harness.chaos.clearAll();
+    harness.mcpManager.resetCircuitBreakers();
     harness.callLogs.length = 0;
   });
 
@@ -143,6 +144,7 @@ describe('Chaos: Recovery Scenarios (full stack)', () => {
       harness.callLogs.length = 0;
       harness.chaos.clear(redisFault);
       harness.chaos.clear(weatherFault);
+      harness.mcpManager.resetCircuitBreakers();
 
       expect(harness.chaos.getActiveFaults()).toHaveLength(0);
 
@@ -155,6 +157,7 @@ describe('Chaos: Recovery Scenarios (full stack)', () => {
       expect(afterRecovery.status).toBe(200);
       assertNoStackTrace(afterRecovery);
       assertComponentCalled(harness.callLogs, 'llm');
+      assertComponentCalled(harness.callLogs, 'weather-api');
 
       logger.info(
         {

@@ -14,6 +14,7 @@ declare module 'opossum' {
     );
     fire(...args: TArgs): Promise<TResult>;
     on(event: string, handler: (...args: unknown[]) => void): this;
+    close(): void;
     opened: boolean;
     shutdown(): void;
   }

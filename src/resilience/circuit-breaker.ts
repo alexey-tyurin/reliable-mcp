@@ -5,6 +5,8 @@ type AsyncFunction<TArgs extends unknown[], TResult> = (
   ...args: TArgs
 ) => Promise<TResult>;
 
+const breakerRegistry = new Map<string, CircuitBreaker>();
+
 interface CircuitBreakerConfig {
   name: string;
   timeout?: number;
@@ -44,6 +46,8 @@ export function createCircuitBreaker<TArgs extends unknown[], TResult>(
     volumeThreshold: config.volumeThreshold ?? DEFAULTS.volumeThreshold,
   });
 
+  breakerRegistry.set(config.name, breaker);
+
   return async (...args: TArgs): Promise<TResult> => {
     try {
       return await breaker.fire(...args);
@@ -54,4 +58,17 @@ export function createCircuitBreaker<TArgs extends unknown[], TResult>(
       throw error;
     }
   };
+}
+
+export function resetCircuitBreaker(name: string): void {
+  const breaker = breakerRegistry.get(name);
+  if (breaker) {
+    breaker.close();
+  }
+}
+
+export function resetAllCircuitBreakers(): void {
+  for (const breaker of breakerRegistry.values()) {
+    breaker.close();
+  }
 }

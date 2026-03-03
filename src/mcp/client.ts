@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { createCircuitBreaker } from '../resilience/circuit-breaker.js';
+import { createCircuitBreaker, resetAllCircuitBreakers } from '../resilience/circuit-breaker.js';
 import { withRetry } from '../resilience/retry.js';
 import { withTimeout } from '../resilience/timeout.js';
 import { createLogger } from '../observability/logger.js';
@@ -53,6 +53,7 @@ export interface McpClientManager {
   disconnect: () => Promise<void>;
   callTool: (toolCall: McpToolCall) => Promise<McpToolResult>;
   listAllTools: () => Promise<McpToolDefinition[]>;
+  resetCircuitBreakers: () => void;
 }
 
 interface CallToolParams { name: string; arguments: Record<string, unknown> }
@@ -300,5 +301,9 @@ export function createMcpClientManager(
     return allTools;
   }
 
-  return { connect, disconnect, callTool, listAllTools };
+  function resetCircuitBreakers(): void {
+    resetAllCircuitBreakers();
+  }
+
+  return { connect, disconnect, callTool, listAllTools, resetCircuitBreakers };
 }

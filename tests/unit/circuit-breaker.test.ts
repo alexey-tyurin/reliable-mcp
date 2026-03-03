@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createCircuitBreaker } from '../../src/resilience/circuit-breaker.js';
+import { createCircuitBreaker, resetAllCircuitBreakers } from '../../src/resilience/circuit-breaker.js';
 import { CircuitOpenError } from '../../src/utils/errors.js';
 
 describe('createCircuitBreaker', () => {
@@ -126,5 +126,33 @@ describe('createCircuitBreaker', () => {
 
     const result = await wrapped();
     expect(result).toBe('ok');
+  });
+
+  it('resetAllCircuitBreakers closes all open circuits', async () => {
+    let shouldFail = true;
+    const fn = vi.fn(async () => {
+      if (shouldFail) {
+        throw new Error('fail');
+      }
+      return 'recovered';
+    });
+    const wrapped = createCircuitBreaker(fn, {
+      name: 'reset-test-cb',
+      volumeThreshold: 1,
+      errorThresholdPercentage: 1,
+      resetTimeout: 60000,
+    });
+
+    // Trip the circuit
+    await expect(wrapped()).rejects.toThrow('fail');
+    await expect(wrapped()).rejects.toBeInstanceOf(CircuitOpenError);
+
+    // Fix the underlying service and reset breakers
+    shouldFail = false;
+    resetAllCircuitBreakers();
+
+    // Circuit should be closed — call goes through
+    const result = await wrapped();
+    expect(result).toBe('recovered');
   });
 });

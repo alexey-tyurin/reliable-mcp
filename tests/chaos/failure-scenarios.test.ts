@@ -20,6 +20,7 @@ describe('Chaos: Failure Scenarios (full stack)', () => {
 
   afterEach(() => {
     harness.chaos.clearAll();
+    harness.mcpManager.resetCircuitBreakers();
     harness.callLogs.length = 0;
   });
 
