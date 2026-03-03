@@ -48,8 +48,6 @@ The order matters: the circuit breaker sees all failure modes (timeouts, retries
 
 Chaos testing is powered by [**mcp-chaos-monkey**](https://github.com/alexey-tyurin/mcp-chaos-monkey) — an open-source fault injection framework for MCP pipelines that I created and published as a standalone npm package. Both **reliable-mcp** and **mcp-chaos-monkey** are my projects; I built mcp-chaos-monkey as an **original contribution** to the MCP ecosystem because no existing tool addressed systematic chaos testing for MCP-based systems. It is a reusable package that any MCP project can adopt to validate its resilience stack under realistic failure conditions.
 
-> See the full write-up in my portfolio: [Fault Injection Framework — Chaos Engineering for MCP Pipelines (Original Contribution)](https://github.com/alexey-tyurin/my-projects).
-
 **mcp-chaos-monkey** provides **8 fault types** across **9 injection targets**, exercised by 21 automated chaos tests in this project:
 
 | Fault Type | What It Simulates |
