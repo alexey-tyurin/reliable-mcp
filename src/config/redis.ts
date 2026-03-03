@@ -39,7 +39,7 @@ export function createRedisClient(
   });
 
   if (process.env['CHAOS_ENABLED'] === 'true') {
-    import('../chaos/interceptors/redis-interceptor.js')
+    import('mcp-chaos-monkey')
       .then(({ wrapRedisWithChaos }) => {
         wrapRedisWithChaos(client, 'redis');
         logger.info('Redis chaos interceptor wired');

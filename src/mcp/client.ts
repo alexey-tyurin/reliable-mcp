@@ -213,8 +213,7 @@ export function createMcpClientManager(
   async function checkMcpChaos(serverName: string): Promise<void> {
     if (process.env['CHAOS_ENABLED'] !== 'true') return;
 
-    const { ChaosController } = await import('../chaos/controller.js');
-    const { isFaultTarget } = await import('../chaos/fault-types.js');
+    const { ChaosController, isFaultTarget } = await import('mcp-chaos-monkey');
     const controller = ChaosController.getInstance();
 
     if (!isFaultTarget(serverName)) return;

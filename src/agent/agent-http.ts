@@ -153,7 +153,9 @@ export async function createAgentApp(config: AgentAppConfig): Promise<express.Ex
   const chatMiddleware: express.RequestHandler[] = [];
 
   if (process.env['CHAOS_ENABLED'] === 'true' && process.env['NODE_ENV'] !== 'production') {
-    const { chaosAuthMiddleware } = await import('../chaos/interceptors/auth-interceptor.js');
+    const { initializeChaos } = await import('../chaos-config.js');
+    initializeChaos();
+    const { chaosAuthMiddleware } = await import('mcp-chaos-monkey');
     chatMiddleware.push(chaosAuthMiddleware as express.RequestHandler);
   }
 
@@ -166,7 +168,7 @@ export async function createAgentApp(config: AgentAppConfig): Promise<express.Ex
   app.post('/chat', ...chatMiddleware);
 
   if (process.env['CHAOS_ENABLED'] === 'true' && process.env['NODE_ENV'] !== 'production') {
-    const { registerChaosEndpoint } = await import('../chaos/admin-endpoint.js');
+    const { registerChaosEndpoint } = await import('mcp-chaos-monkey');
     registerChaosEndpoint(app);
   }
 

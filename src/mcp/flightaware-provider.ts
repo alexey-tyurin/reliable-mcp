@@ -91,7 +91,7 @@ export interface FlightAwareConfig {
 async function resolveFlightFetch(config: FlightAwareConfig): Promise<typeof fetch> {
   const baseFetch = config.fetchFn ?? globalThis.fetch;
   if (process.env['CHAOS_ENABLED'] === 'true') {
-    const { createChaosAwareFetch } = await import('../chaos/interceptors/http-interceptor.js');
+    const { createChaosAwareFetch } = await import('mcp-chaos-monkey');
     return createChaosAwareFetch('flight-api', baseFetch);
   }
   return baseFetch;

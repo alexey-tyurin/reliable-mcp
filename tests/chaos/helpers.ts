@@ -4,7 +4,8 @@ import { SignJWT } from 'jose';
 import { ChatOpenAI } from '@langchain/openai';
 import type { BaseMessage } from '@langchain/core/messages';
 import { Client as LangSmithClient } from 'langsmith';
-import { ChaosController } from '../../src/chaos/controller.js';
+import { ChaosController, configureChaosLogger } from 'mcp-chaos-monkey';
+import type { ChaosLogger } from 'mcp-chaos-monkey';
 import { createWeatherMcpServer } from '../../src/mcp/weather-server.js';
 import { createFlightMcpServer } from '../../src/mcp/flight-server.js';
 import { createMcpClientManager } from '../../src/mcp/client.js';
@@ -149,6 +150,7 @@ async function createChaosTestHarness(): Promise<ChaosTestHarness> {
   process.env['CHAOS_ENABLED'] = 'true';
   process.env['NODE_ENV'] = 'test';
 
+  configureChaosLogger((name: string): ChaosLogger => createLogger(name));
   ChaosController.reset();
   const chaos = ChaosController.getInstance();
   const callLogs: CallLog[] = [];
