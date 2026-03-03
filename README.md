@@ -29,7 +29,7 @@ A production-grade chatbot that answers weather and flight status questions (inc
 | **Timeout budgets** | Bounds latency per operation; prevents thread starvation | `src/resilience/timeout.ts` |
 | **Graceful degradation** | Returns partial results when one MCP server is down | `src/mcp/client.ts`, `src/agent/nodes.ts` |
 | **Semantic caching** | Reduces LLM + tool calls for similar questions; TTL varies by data volatility | `src/cache/semantic-cache.ts` |
-| **Chaos / fault injection** | Proves resilience patterns actually work under failure | `src/chaos/`, `tests/chaos/` |
+| **Chaos / fault injection** | Proves resilience patterns actually work under failure ([mcp-chaos-monkey](https://github.com/alexey-tyurin/mcp-chaos-monkey) — my original open-source framework) | `src/chaos/`, `tests/chaos/` |
 | **Graceful shutdown** | LIFO cleanup within Docker's 10s stop timeout; no resource leaks | `src/utils/graceful-shutdown.ts` |
 | **Stale session reconnection** | Auto-recovers when MCP server restarts mid-session | `src/mcp/client.ts` |
 | **Pre-deploy evaluation gate** | Blocks deployment if tool accuracy drops below 90% or any critical failure exists | `tests/eval/` |
@@ -46,7 +46,11 @@ The order matters: the circuit breaker sees all failure modes (timeouts, retries
 
 ### Chaos Testing — Proving It Works
 
-The project includes a fault injection framework with **8 fault types** across **9 injection targets** — exercised by 21 automated chaos tests:
+Chaos testing is powered by [**mcp-chaos-monkey**](https://github.com/alexey-tyurin/mcp-chaos-monkey) — an open-source fault injection framework for MCP pipelines that I created and published as a standalone npm package. Both **reliable-mcp** and **mcp-chaos-monkey** are my projects; I built mcp-chaos-monkey as an **original contribution** to the MCP ecosystem because no existing tool addressed systematic chaos testing for MCP-based systems. It is a reusable package that any MCP project can adopt to validate its resilience stack under realistic failure conditions.
+
+> See the full write-up in my portfolio: [Fault Injection Framework — Chaos Engineering for MCP Pipelines (Original Contribution)](https://github.com/alexey-tyurin/my-projects).
+
+**mcp-chaos-monkey** provides **8 fault types** across **9 injection targets**, exercised by 21 automated chaos tests in this project:
 
 | Fault Type | What It Simulates |
 |---|---|
@@ -59,7 +63,7 @@ The project includes a fault injection framework with **8 fault types** across *
 | `malformed` | Corrupted JSON response body |
 | `schema-mismatch` | Valid JSON with missing fields |
 
-Faults inject at the transport level (fetch, Redis commands) so circuit breakers, retries, and timeouts exercise naturally — no mocking around them.
+Faults inject at the **transport level** (HTTP fetch, Redis commands) so circuit breakers, retries, and timeouts exercise naturally — no mocking around them. This is the key design insight: by intercepting at the network boundary rather than stubbing application code, every layer of the resilience stack is validated end-to-end.
 
 **Production safety**: chaos code is triple-guarded — `CHAOS_ENABLED` env check + `NODE_ENV !== 'production'` check + excluded from production build via `tsconfig.prod.json`.
 
@@ -337,7 +341,7 @@ The agent tracks: cache hit/miss rates, error counts by type, circuit breaker st
 | Auth | OAuth 2.1 (client_credentials), jose (JWT) |
 | Cache | Redis (ioredis), cosine similarity on OpenAI embeddings |
 | Resilience | opossum (circuit breaker), custom retry with jitter, timeout budgets |
-| Chaos | Custom fault injection framework (8 fault types, 9 targets) |
+| Chaos | [mcp-chaos-monkey](https://github.com/alexey-tyurin/mcp-chaos-monkey) — my open-source fault injection framework for MCP (8 fault types, 9 targets) |
 | Observability | LangSmith tracing, pino structured logging |
 | Testing | vitest (317 tests), evaluation suite (63 cases, 4 evaluators) |
 | Validation | zod (env, API input, MCP schemas, responses) |
