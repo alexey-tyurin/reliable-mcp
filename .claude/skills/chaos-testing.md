@@ -29,7 +29,7 @@ The chaos framework is a **lightweight, dev/test-only** fault injection layer th
 ### Hard Guards — Non-Negotiable
 
 ```typescript
-// src/chaos/guard.ts
+// mcp-chaos-monkey: guard.ts (library code)
 export function assertChaosAllowed(): void {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('FATAL: Chaos framework must never run in production');
@@ -44,19 +44,13 @@ export function assertChaosAllowed(): void {
 
 1. **Environment guard:** `CHAOS_ENABLED=true` env var required. Not set by default anywhere — must be explicitly opted into.
 2. **NODE_ENV check:** Refuses to load if `NODE_ENV=production`. Hard crash, not a warning.
-3. **Build-time exclusion:** Chaos code lives in `src/chaos/` and `tests/chaos/`. Production Dockerfile does NOT copy `src/chaos/`. The `tsconfig.prod.json` excludes `src/chaos/**` from compilation.
-
-```dockerfile
-# In Dockerfile — production stage does NOT include chaos code
-COPY --from=build /app/dist ./dist
-# src/chaos/ is excluded from the build via tsconfig.prod.json
-```
+3. **Build-time exclusion:** Chaos config lives in `src/chaos-config.ts` and `src/chaos-scenarios.ts`. The `tsconfig.prod.json` excludes these files from compilation. The chaos framework itself is in the `mcp-chaos-monkey` npm package.
 
 ```jsonc
 // tsconfig.prod.json
 {
   "extends": "./tsconfig.json",
-  "exclude": ["src/chaos/**", "tests/**"]
+  "exclude": ["node_modules", "dist", "src/chaos-config.ts", "src/chaos-scenarios.ts", "tests/**"]
 }
 ```
 
@@ -65,16 +59,14 @@ COPY --from=build /app/dist ./dist
 ### File Structure
 
 ```
-src/chaos/
-├── guard.ts                # Production safety guards
-├── controller.ts           # ChaosController — central fault registry
-├── fault-types.ts          # Fault definitions (latency, error, etc.)
-├── interceptors/
-│   ├── http-interceptor.ts # Intercepts fetch() for MCP/API calls
-│   ├── redis-interceptor.ts # Intercepts Redis client commands
-│   └── auth-interceptor.ts  # Intercepts OAuth token validation
-├── scenarios.ts            # Pre-built chaos scenarios
-└── cli.ts                  # Manual trigger via CLI (optional)
+# mcp-chaos-monkey (npm package) provides:
+#   ChaosController, assertChaosAllowed, FaultConfig, FaultTarget, isFaultTarget,
+#   createChaosAwareFetch, wrapRedisWithChaos, chaosAuthMiddleware,
+#   registerChaosEndpoint, defineScenario, configureChaosLogger
+
+# Project-specific chaos config:
+src/chaos-config.ts         # ReliableMcpTarget type, isReliableMcpTarget(), initializeChaos()
+src/chaos-scenarios.ts      # 10 project-specific scenarios using defineScenario()
 
 tests/chaos/
 ├── failure-scenarios.test.ts    # Automated chaos test suite
@@ -87,10 +79,10 @@ tests/chaos/
 Central registry that manages active faults. All interceptors check the controller before executing.
 
 ```typescript
-// src/chaos/controller.ts
+// mcp-chaos-monkey: controller.ts (library code)
 import { assertChaosAllowed } from './guard.js';
 import { type FaultConfig, type FaultTarget } from './fault-types.js';
-import { logger } from '../observability/logger.js';
+import { getLogger } from './logger.js';
 
 interface ActiveFault {
   target: FaultTarget;
@@ -187,10 +179,9 @@ export class ChaosController {
 ### Fault Types
 
 ```typescript
-// src/chaos/fault-types.ts
-
-/** What can be disrupted */
-export type FaultTarget =
+// mcp-chaos-monkey: FaultTarget = string (open type)
+// Project narrows it in src/chaos-config.ts:
+export type ReliableMcpTarget =
   | 'weather-api'         // WeatherAPI.com calls from weather-mcp
   | 'flight-api'          // FlightAware API calls from flight-mcp
   | 'weather-mcp'         // Agent → weather MCP server HTTP
@@ -201,7 +192,7 @@ export type FaultTarget =
   | 'oauth-token'         // OAuth token validation
   | 'llm-api';            // OpenAI LLM calls
 
-/** Types of faults that can be injected */
+// mcp-chaos-monkey: FaultConfig (unchanged from library)
 export type FaultConfig =
   | { type: 'latency'; delayMs: number; probability?: number }
   | { type: 'error'; statusCode: number; message?: string; probability?: number }
@@ -218,10 +209,10 @@ export type FaultConfig =
 Wraps `fetch()` to inject faults on matching targets. Used for MCP server calls and external API calls.
 
 ```typescript
-// src/chaos/interceptors/http-interceptor.ts
+// mcp-chaos-monkey: interceptors/http-interceptor.ts (library code)
 import { ChaosController } from '../controller.js';
 import { type FaultTarget, type FaultConfig } from '../fault-types.js';
-import { logger } from '../../observability/logger.js';
+import { getLogger } from '../logger.js';
 
 /**
  * Returns a wrapped fetch function that checks the ChaosController
@@ -322,11 +313,11 @@ function delay(ms: number): Promise<void> {
 Wraps `ioredis` commands to inject faults on Redis operations.
 
 ```typescript
-// src/chaos/interceptors/redis-interceptor.ts
+// mcp-chaos-monkey: interceptors/redis-interceptor.ts (library code)
 import { ChaosController } from '../controller.js';
 import type { FaultTarget } from '../fault-types.js';
 import type Redis from 'ioredis';
-import { logger } from '../../observability/logger.js';
+import { getLogger } from '../logger.js';
 
 /**
  * Wraps a Redis client's command methods with chaos fault injection.
@@ -386,10 +377,10 @@ export function wrapRedisWithChaos(
 Intercepts JWT token validation to simulate auth failures.
 
 ```typescript
-// src/chaos/interceptors/auth-interceptor.ts
+// mcp-chaos-monkey: interceptors/auth-interceptor.ts (library code)
 import { ChaosController } from '../controller.js';
 import type { Request, Response, NextFunction } from 'express';
-import { logger } from '../../observability/logger.js';
+import { getLogger } from '../logger.js';
 
 /**
  * Express middleware that injects auth faults before the real auth middleware.
@@ -456,9 +447,9 @@ const faultId = chaos.inject('flight-api', { type: 'error', statusCode: 500 });
 chaos.clear(faultId);
 
 // Optional: CLI for manual Docker-based exploration
-// npx ts-node src/chaos/cli.ts inject weather-api error --status 503 --duration 30
-// npx ts-node src/chaos/cli.ts clear-all
-// npx ts-node src/chaos/cli.ts status
+// npx mcp-chaos inject weather-api error --status 503 --duration 30
+// npx mcp-chaos clear-all
+// npx mcp-chaos status
 ```
 
 ## Integration Approach
@@ -471,12 +462,15 @@ The chaos layer wraps the **transport functions** (fetch, Redis commands), NOT t
 
 ```typescript
 // In the MCP server or API client module:
-import { createChaosAwareFetch } from '../chaos/interceptors/http-interceptor.js';
-
-// At module initialization, conditionally wrap fetch:
-const fetchFn = process.env.CHAOS_ENABLED === 'true'
-  ? createChaosAwareFetch('weather-api')
-  : globalThis.fetch;
+// Dynamically import from the library only when chaos is enabled:
+async function resolveFetch(target: string): Promise<typeof fetch> {
+  if (process.env['CHAOS_ENABLED'] === 'true') {
+    const { createChaosAwareFetch } = await import('mcp-chaos-monkey');
+    return createChaosAwareFetch(target, globalThis.fetch);
+  }
+  return globalThis.fetch;
+}
+const fetchFn = await resolveFetch('weather-api');
 
 // Use fetchFn instead of fetch in the resilience-wrapped call:
 const fetchWeatherRaw = async (city: string): Promise<WeatherResponse> => {
@@ -489,7 +483,7 @@ const fetchWeatherRaw = async (city: string): Promise<WeatherResponse> => {
 
 ```typescript
 // In test setup (not in application code):
-import { wrapRedisWithChaos } from '../src/chaos/interceptors/redis-interceptor.js';
+import { wrapRedisWithChaos } from 'mcp-chaos-monkey';
 
 let unwrapRedis: () => void;
 
@@ -507,8 +501,10 @@ afterAll(() => {
 
 ```typescript
 // In the Express app setup (conditionally):
-if (process.env.CHAOS_ENABLED === 'true') {
-  const { chaosAuthMiddleware } = await import('../chaos/interceptors/auth-interceptor.js');
+if (process.env['CHAOS_ENABLED'] === 'true' && process.env['NODE_ENV'] !== 'production') {
+  const { initializeChaos } = await import('../chaos-config.js');
+  initializeChaos();
+  const { chaosAuthMiddleware } = await import('mcp-chaos-monkey');
   app.use(chaosAuthMiddleware);
 }
 app.use(oauthMiddleware); // Real auth middleware always applied
@@ -565,8 +561,9 @@ export async function assertLangSmithMetrics(expectations: {
 These are the concrete test scenarios. Each scenario describes what fault is injected, what the system should do, and what to assert.
 
 ```typescript
-// src/chaos/scenarios.ts
-import { type FaultTarget, type FaultConfig } from './fault-types.js';
+// src/chaos-scenarios.ts (project-specific, uses mcp-chaos-monkey)
+import { defineScenario } from 'mcp-chaos-monkey';
+import type { FaultConfig } from 'mcp-chaos-monkey';
 
 export interface ChaosScenario {
   name: string;
@@ -753,10 +750,8 @@ export const CHAOS_SCENARIOS: ChaosScenario[] = [
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
-import { ChaosController } from '../../src/chaos/controller.js';
-import { createChaosAwareFetch } from '../../src/chaos/interceptors/http-interceptor.js';
-import { wrapRedisWithChaos } from '../../src/chaos/interceptors/redis-interceptor.js';
-import { CHAOS_SCENARIOS } from '../../src/chaos/scenarios.js';
+import { ChaosController } from 'mcp-chaos-monkey';
+import { CHAOS_SCENARIOS } from '../../src/chaos-scenarios.js';
 
 // Test helper: send a chat request through the full agent stack
 async function sendChatRequest(query: string): Promise<{
@@ -920,11 +915,11 @@ CHAOS_ENABLED=true npm run test:chaos
 CHAOS_ENABLED=true npx vitest tests/chaos/failure-scenarios.test.ts -t "weather API 503"
 
 # Manual chaos exploration against running Docker stack
-# (optional CLI — useful for demos and exploratory testing)
-CHAOS_ENABLED=true npx ts-node src/chaos/cli.ts inject weather-api error --status 503 --duration 60
+# (optional CLI from mcp-chaos-monkey — useful for demos and exploratory testing)
+CHAOS_ENABLED=true npx mcp-chaos inject weather-api error --status 503 --duration 60
 # ... manually test the chatbot ...
-CHAOS_ENABLED=true npx ts-node src/chaos/cli.ts clear-all
-CHAOS_ENABLED=true npx ts-node src/chaos/cli.ts status
+CHAOS_ENABLED=true npx mcp-chaos clear-all
+CHAOS_ENABLED=true npx mcp-chaos status
 ```
 
 ### npm Scripts (add to package.json)
@@ -934,8 +929,8 @@ CHAOS_ENABLED=true npx ts-node src/chaos/cli.ts status
   "scripts": {
     "test:chaos": "CHAOS_ENABLED=true vitest run tests/chaos/",
     "test:chaos:watch": "CHAOS_ENABLED=true vitest watch tests/chaos/",
-    "chaos:status": "CHAOS_ENABLED=true ts-node src/chaos/cli.ts status",
-    "chaos:clear": "CHAOS_ENABLED=true ts-node src/chaos/cli.ts clear-all"
+    "chaos:status": "CHAOS_ENABLED=true npx mcp-chaos status",
+    "chaos:clear": "CHAOS_ENABLED=true npx mcp-chaos clear-all"
   }
 }
 ```
@@ -944,17 +939,16 @@ CHAOS_ENABLED=true npx ts-node src/chaos/cli.ts status
 
 Before considering the chaos framework done:
 
-- [ ] `guard.ts` prevents any chaos code from loading in production (NODE_ENV + CHAOS_ENABLED)
-- [ ] `tsconfig.prod.json` excludes `src/chaos/**` from production build
-- [ ] Dockerfile does NOT copy chaos code to production image
+- [ ] `mcp-chaos-monkey` guard prevents chaos code from loading in production (NODE_ENV + CHAOS_ENABLED)
+- [ ] `tsconfig.prod.json` excludes `src/chaos-config.ts` and `src/chaos-scenarios.ts` from production build
+- [ ] All chaos imports guarded by `CHAOS_ENABLED` check (dynamic imports only)
 - [ ] ChaosController is singleton with reset capability (test isolation)
 - [ ] HTTP interceptor wraps fetch for all fault targets
 - [ ] Redis interceptor wraps ioredis commands with unwrap cleanup
 - [ ] Auth interceptor is conditional Express middleware
-- [ ] All 10 scenarios from `scenarios.ts` have corresponding test implementations
+- [ ] All 10 scenarios from `src/chaos-scenarios.ts` have corresponding test implementations
 - [ ] Each test cleans up faults in afterEach (no fault leakage between tests)
 - [ ] Recovery scenarios verify that systems heal after faults clear
 - [ ] LangSmith shows correct metrics during chaos runs
-- [ ] No `any` types in `src/chaos/`
-- [ ] All chaos code uses the pino logger (no console.log)
+- [ ] `configureChaosLogger` called with pino before chaos usage (via `initializeChaos()`)
 - [ ] `npm run test:chaos` passes cleanly from a fresh `docker compose up`

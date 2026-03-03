@@ -45,6 +45,7 @@ Full implementation plan: `implementation-plan.md` in project root.
 - jose for JWT (OAuth 2.1 client_credentials grant)
 - pino for structured logging
 - LangSmith for observability and cost tracking
+- mcp-chaos-monkey for chaos/fault injection (dev/test only)
 - vitest for testing
 - zod for all validation (env, MCP schemas, API responses)
 
@@ -139,7 +140,8 @@ src/auth/              — OAuth 2.1 JWT issuance + middleware
 src/agent/             — LangGraphJS graph, nodes, state, prompt
 src/mcp/               — MCP servers (weather, flight), MCP client, zod schemas
 src/resilience/        — Circuit breaker, retry, rate limiter, timeout
-src/chaos/             — Fault injection framework (dev/test only, excluded from prod build)
+src/chaos-config.ts    — Project-specific chaos targets (ReliableMcpTarget) + logger init
+src/chaos-scenarios.ts — 10 project-specific chaos scenarios using mcp-chaos-monkey
 src/cache/             — Semantic cache, session store
 src/observability/     — LangSmith tracing, metrics, pino logger
 src/utils/             — Custom errors, health endpoint, graceful shutdown
@@ -174,7 +176,7 @@ npm run test:chaos
 
 # Chaos testing (fault injection)
 CHAOS_ENABLED=true npm run test:chaos          # Automated chaos scenarios
-CHAOS_ENABLED=true npx ts-node src/chaos/cli.ts status   # View active faults (manual mode)
+CHAOS_ENABLED=true npx mcp-chaos status                   # View active faults (manual mode)
 
 # Evaluation
 npm run eval:quick        # tool-calling only (~1 min)
@@ -196,7 +198,7 @@ npm run predeploy         # typecheck + lint + all tests + full eval
 - ❌ `setInterval` / `setTimeout` without clearing on shutdown
 - ❌ Files over 200 lines
 - ❌ Dependencies with `^` or `~` — pin exact versions
-- ❌ Importing from `src/chaos/` in production code without `CHAOS_ENABLED` guard
+- ❌ Importing from `mcp-chaos-monkey` in production code without `CHAOS_ENABLED` guard
 - ❌ Inline lambdas for complex logic — extract named functions
 - ❌ Testing after implementation — write tests FIRST
 
